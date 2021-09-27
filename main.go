@@ -10,7 +10,7 @@ import (
 	"github.com/dadosjusbr/proto/coleta"
 	"github.com/dadosjusbr/proto/pipeline"
 	"github.com/kelseyhightower/envconfig"
-	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/encoding/prototext"
 )
 
 type config struct {
@@ -43,7 +43,7 @@ func main() {
 	if err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error reading execution result: %v", err)))
 	}
-	if err = proto.Unmarshal(erIN, &er); err != nil {
+	if err = prototext.Unmarshal(erIN, &er); err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error reading execution result: %v", err)))
 	}
 
