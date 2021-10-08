@@ -153,8 +153,8 @@ func updateSummary(s *Summary, emp coleta.ContraCheque) {
 	}
 	s.IncomeHistogram[salaryRange]++
 
-	updateData(&s.Wage, salaryBase, s.Count)
-	updateData(&s.Benefits, benefits, s.Count)
+	updateData(&s.BaseRemuneration, salaryBase, s.Count)
+	updateData(&s.OtherRemunerations, benefits, s.Count)
 }
 
 func calcBaseSalary(emp coleta.ContraCheque) (float64, float64) {
