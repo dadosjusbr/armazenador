@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"time"
 
 	"github.com/dadosjusbr/coletores/status"
 	"github.com/dadosjusbr/proto/coleta"
@@ -77,6 +78,7 @@ func main() {
 		Backups:           backup,
 		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
 		Package:           packBackup,
+		ExectionTime:      float64(time.Now().Sub(er.Rc.Coleta.TimestampColeta.AsTime()).Milliseconds()),
 	}
 	if er.Rc.Procinfo != nil && er.Rc.Procinfo.Status != 0 {
 		agmi.ProcInfo = er.Rc.Procinfo
