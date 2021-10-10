@@ -37,7 +37,7 @@ type AgencyMonthlyInfo struct {
 	Year              int                    `json:"year,omitempty" bson:"year,omitempty"`
 	Backups           []Backup               `json:"backups,omitempty" bson:"backups,omitempty"`
 	Summary           Summary                `json:"summary,omitempty" bson:"summary,omitempty"`
-	CrawlerID         string                 `json:"crawlerid,omitempty" bson:"crawlerid,omitempty"`
+	CrawlerID         string                 `json:"crawler_id,omitempty" bson:"crawler_id,omitempty"`
 	CrawlerVersion    string                 `json:"crawler_version,omitempty" bson:"crawler_version,omitempty"`
 	CrawlerDir        string                 `json:"crawler_dir,omitempty" bson:"crawler_dir,omitempty"`
 	CrawlingTimestamp *timestamppb.Timestamp `json:"crawling_ts,omitempty" bson:"crawling_ts,omitempty"` // Crawling moment (always UTC)
