@@ -77,8 +77,24 @@ func main() {
 		Summary:           summary(er.Rc.Folha.ContraCheque),
 		Backups:           backup,
 		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
-		Package:           packBackup,
-		ExectionTime:      float64(time.Now().Sub(er.Rc.Coleta.TimestampColeta.AsTime()).Milliseconds()),
+		CrawlerRepo:       er.Rc.Coleta.RepositorioColetor,
+		Meta: &Meta{
+			NoLoginRequired:   er.Rc.Metadados.NaoRequerLogin,
+			NoCaptchaRequired: er.Rc.Metadados.NaoRequerLogin,
+			Access:            er.Rc.Metadados.Acesso.String(),
+			Extension:         er.Rc.Metadados.Extensao.String(),
+			StrictlyTabular:   er.Rc.Metadados.EstritamenteTabular,
+			ConsistentFormat:  er.Rc.Metadados.FormatoConsistente,
+			HaveEnrollment:    er.Rc.Metadados.TemCargo,
+			ThereIsACapacity:  er.Rc.Metadados.TemMatricula,
+			HasPosition:       er.Rc.Metadados.TemCargo,
+			BaseRevenue:       er.Rc.Metadados.ReceitaBase.String(),
+			OtherRecipes:      er.Rc.Metadados.OutrasReceitas.String(),
+			Expenditure:       er.Rc.Metadados.Despesas.String(),
+		},
+		ProcInfo:     er.Rc.Procinfo,
+		Package:      packBackup,
+		ExectionTime: float64(time.Now().Sub(er.Rc.Coleta.TimestampColeta.AsTime()).Milliseconds()),
 	}
 	if er.Rc.Procinfo != nil && er.Rc.Procinfo.Status != 0 {
 		agmi.ProcInfo = er.Rc.Procinfo
