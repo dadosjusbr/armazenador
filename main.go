@@ -92,9 +92,9 @@ func main() {
 			OtherRecipes:      er.Rc.Metadados.OutrasReceitas.String(),
 			Expenditure:       er.Rc.Metadados.Despesas.String(),
 		},
-		ProcInfo:     er.Rc.Procinfo,
-		Package:      packBackup,
-		ExectionTime: float64(time.Now().Sub(er.Rc.Coleta.TimestampColeta.AsTime()).Milliseconds()),
+		ProcInfo:       er.Rc.Procinfo,
+		Package:        packBackup,
+		ExectionTimeMS: float64(time.Since(er.Rc.Coleta.TimestampColeta.AsTime()).Milliseconds()),
 	}
 	if er.Rc.Procinfo != nil && er.Rc.Procinfo.Status != 0 {
 		agmi.ProcInfo = er.Rc.Procinfo
