@@ -94,7 +94,7 @@ func main() {
 		},
 		ProcInfo:       er.Rc.Procinfo,
 		Package:        packBackup,
-		ExectionTimeMS: float64(time.Since(er.Rc.Coleta.TimestampColeta.AsTime()).Milliseconds()),
+		ExectionTimeMs: float64(time.Since(er.Rc.Coleta.TimestampColeta.AsTime()).Milliseconds()),
 	}
 	if er.Rc.Procinfo != nil && er.Rc.Procinfo.Status != 0 {
 		agmi.ProcInfo = er.Rc.Procinfo
