@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"time"
 
 	"github.com/dadosjusbr/coletores/status"
 	"github.com/dadosjusbr/proto/coleta"
@@ -76,7 +77,24 @@ func main() {
 		Summary:           summary(er.Rc.Folha.ContraCheque),
 		Backups:           backup,
 		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
-		Package:           packBackup,
+		CrawlerRepo:       er.Rc.Coleta.RepositorioColetor,
+		Meta: &Meta{
+			NoLoginRequired:   er.Rc.Metadados.NaoRequerLogin,
+			NoCaptchaRequired: er.Rc.Metadados.NaoRequerLogin,
+			Access:            er.Rc.Metadados.Acesso.String(),
+			Extension:         er.Rc.Metadados.Extensao.String(),
+			StrictlyTabular:   er.Rc.Metadados.EstritamenteTabular,
+			ConsistentFormat:  er.Rc.Metadados.FormatoConsistente,
+			HaveEnrollment:    er.Rc.Metadados.TemCargo,
+			ThereIsACapacity:  er.Rc.Metadados.TemMatricula,
+			HasPosition:       er.Rc.Metadados.TemCargo,
+			BaseRevenue:       er.Rc.Metadados.ReceitaBase.String(),
+			OtherRecipes:      er.Rc.Metadados.OutrasReceitas.String(),
+			Expenditure:       er.Rc.Metadados.Despesas.String(),
+		},
+		ProcInfo:       er.Rc.Procinfo,
+		Package:        packBackup,
+		ExectionTimeMS: float64(time.Since(er.Rc.Coleta.TimestampColeta.AsTime()).Milliseconds()),
 	}
 	if er.Rc.Procinfo != nil && er.Rc.Procinfo.Status != 0 {
 		agmi.ProcInfo = er.Rc.Procinfo
@@ -153,8 +171,8 @@ func updateSummary(s *Summary, emp coleta.ContraCheque) {
 	}
 	s.IncomeHistogram[salaryRange]++
 
-	updateData(&s.Wage, salaryBase, s.Count)
-	updateData(&s.Benefits, benefits, s.Count)
+	updateData(&s.BaseRemuneration, salaryBase, s.Count)
+	updateData(&s.OtherRemunerations, benefits, s.Count)
 }
 
 func calcBaseSalary(emp coleta.ContraCheque) (float64, float64) {
