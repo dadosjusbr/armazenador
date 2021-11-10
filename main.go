@@ -80,7 +80,7 @@ func main() {
 		CrawlerRepo:       er.Rc.Coleta.RepositorioColetor,
 		Meta: &Meta{
 			NoLoginRequired:   er.Rc.Metadados.NaoRequerLogin,
-			NoCaptchaRequired: er.Rc.Metadados.NaoRequerLogin,
+			NoCaptchaRequired: er.Rc.Metadados.NaoRequerCaptcha,
 			Access:            er.Rc.Metadados.Acesso.String(),
 			Extension:         er.Rc.Metadados.Extensao.String(),
 			StrictlyTabular:   er.Rc.Metadados.EstritamenteTabular,
