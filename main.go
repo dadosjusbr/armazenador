@@ -179,7 +179,7 @@ func calcBaseSalary(emp coleta.ContraCheque) (float64, float64) {
 	var salaryBase float64
 	var benefits float64
 	for _, v := range emp.Remuneracoes.Remuneracao {
-		if v.TipoReceita == coleta.Remuneracao_B {
+		if v.TipoReceita == coleta.Remuneracao_B && v.Natureza == coleta.Remuneracao_R {
 			salaryBase += v.Valor
 		} else if v.TipoReceita == coleta.Remuneracao_O && v.Natureza == coleta.Remuneracao_R {
 			benefits += v.Valor
