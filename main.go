@@ -92,6 +92,11 @@ func main() {
 			OtherRecipes:      er.Rc.Metadados.OutrasReceitas.String(),
 			Expenditure:       er.Rc.Metadados.Despesas.String(),
 		},
+		Score: &Score{
+			Score:             calcScore(*er.Rc.Metadados),
+			CompletenessScore: calcCompletenessScore(*er.Rc.Metadados),
+			EasinessScore:     calcEasinessScore(*er.Rc.Metadados),
+		},
 		ProcInfo:       er.Rc.Procinfo,
 		Package:        packBackup,
 		ExectionTimeMs: float64(time.Since(er.Rc.Coleta.TimestampColeta.AsTime()).Milliseconds()),
@@ -186,4 +191,57 @@ func calcBaseSalary(emp coleta.ContraCheque) (float64, float64) {
 		}
 	}
 	return salaryBase, benefits
+}
+
+func calcCriteria(criteria bool, value float64) float64 {
+	if criteria {
+		return value
+	}
+	return 0
+}
+
+func calcStringCriteria(criteria string, values map[string]float64) float64 {
+	for k := range values {
+		if criteria == k {
+			return values[k]
+		}
+	}
+	return 0
+}
+
+func calcCompletenessScore(meta coleta.Metadados) float64 {
+	var score float64 = 0
+	var options = map[string]float64{"SUMARIZADO": 0.5, "DETALHADO": 1}
+
+	score = score + calcCriteria(meta.TemLotacao, 1)
+	score = score + calcCriteria(meta.TemCargo, 1)
+	score = score + calcCriteria(meta.TemMatricula, 1)
+	score = score + calcStringCriteria(meta.ReceitaBase.String(), options)
+	score = score + calcStringCriteria(meta.OutrasReceitas.String(), options)
+	score = score + calcStringCriteria(meta.Despesas.String(), options)
+
+	return score / 6
+}
+
+func calcEasinessScore(meta coleta.Metadados) float64 {
+	var score float64 = 0
+	var options = map[string]float64{
+		"ACESSO_DIRETO":          1,
+		"AMIGAVEL_PARA_RASPAGEM": 0.5,
+		"RASPAGEM_DIFICULTADA":   0.25}
+
+	score = score + calcCriteria(meta.NaoRequerLogin, 1)
+	score = score + calcCriteria(meta.NaoRequerCaptcha, 1)
+	score = score + calcStringCriteria(meta.Acesso.String(), options)
+
+	return score / 3
+}
+
+func calcScore(meta coleta.Metadados) float64 {
+	var score float64 = 0
+	var completeness = calcCompletenessScore(meta)
+	var easiness = calcCompletenessScore(meta)
+	score = (completeness + easiness) / 2
+
+	return score
 }
