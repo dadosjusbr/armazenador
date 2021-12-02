@@ -9,6 +9,8 @@ github.com/dadosjusbr/proto v0.0.0-20211014162903-f4e424a3c6b4 h1:J+Sb2mV4AKLRYz
 github.com/dadosjusbr/proto v0.0.0-20211014162903-f4e424a3c6b4/go.mod h1:O+J9NWE4o4IkP6XN7CMZ8TnPxrbkqyuIp/Wvvst4W/s=
 github.com/dadosjusbr/proto v0.0.0-20211015231253-b8391964395a h1:JkMyCT92jfqi06dVCjT+J0Kg4M6P24I0S6WQmSN62ns=
 github.com/dadosjusbr/proto v0.0.0-20211015231253-b8391964395a/go.mod h1:O+J9NWE4o4IkP6XN7CMZ8TnPxrbkqyuIp/Wvvst4W/s=
+github.com/dadosjusbr/proto v0.0.0-20211129103514-9c088f1a601c h1:4b9vaEgN+747yQ5N7Pao/7zcwlD8mvTCH9VUjZM0jFY=
+github.com/dadosjusbr/proto v0.0.0-20211129103514-9c088f1a601c/go.mod h1:cUy4r8q1n58ClC4IlsAQ49nr8hIDwA01HiTYAJ1eMVc=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
