@@ -20,7 +20,7 @@ func TestCalcCompletenessScore(t *testing.T) {
 			ReceitaBase:    coleta.Metadados_DETALHADO,
 			OutrasReceitas: coleta.Metadados_DETALHADO,
 			Despesas:       coleta.Metadados_DETALHADO,
-		}, float64(1)},
+		}, 1.0},
 		{"Worst", coleta.Metadados{
 			TemMatricula:   false,
 			TemLotacao:     false,
@@ -28,7 +28,7 @@ func TestCalcCompletenessScore(t *testing.T) {
 			ReceitaBase:    coleta.Metadados_AUSENCIA,
 			OutrasReceitas: coleta.Metadados_AUSENCIA,
 			Despesas:       coleta.Metadados_AUSENCIA,
-		}, float64(0)},
+		}, 0.0},
 	}
 
 	for _, d := range data {
@@ -52,14 +52,14 @@ func TestCalcEasinessScore(t *testing.T) {
 			Acesso:              coleta.Metadados_ACESSO_DIRETO,
 			FormatoConsistente:  true,
 			EstritamenteTabular: true,
-		}, float64(1)},
+		}, 1.0},
 		{"Worst", coleta.Metadados{
 			NaoRequerLogin:      false,
 			NaoRequerCaptcha:    false,
 			Acesso:              coleta.Metadados_NECESSITA_SIMULACAO_USUARIO,
 			FormatoConsistente:  false,
 			EstritamenteTabular: false,
-		}, float64(0)},
+		}, 0.0},
 	}
 
 	for _, d := range data {
