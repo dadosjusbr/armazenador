@@ -240,9 +240,9 @@ func calcEasinessScore(meta coleta.Metadados) float64 {
 }
 
 func calcScore(meta coleta.Metadados) float64 {
-	var score float64 = 0
+	var score = 0.0
 	var completeness = calcCompletenessScore(meta)
-	var easiness = calcCompletenessScore(meta)
+	var easiness = calcEasinessScore(meta)
 	score = (completeness + easiness) / 2
 
 	return score
