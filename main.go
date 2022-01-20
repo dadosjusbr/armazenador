@@ -233,14 +233,16 @@ func calcEasinessScore(meta coleta.Metadados) float64 {
 	score = score + calcCriteria(meta.NaoRequerLogin, 1)
 	score = score + calcCriteria(meta.NaoRequerCaptcha, 1)
 	score = score + calcStringCriteria(meta.Acesso.String(), options)
+	score = score + calcCriteria(meta.FormatoConsistente, 1)
+	score = score + calcCriteria(meta.EstritamenteTabular, 1)
 
-	return score / 3
+	return score / 5
 }
 
 func calcScore(meta coleta.Metadados) float64 {
-	var score float64 = 0
+	var score = 0.0
 	var completeness = calcCompletenessScore(meta)
-	var easiness = calcCompletenessScore(meta)
+	var easiness = calcEasinessScore(meta)
 	score = (completeness + easiness) / 2
 
 	return score
