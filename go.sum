@@ -1,6 +1,8 @@
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/dadosjusbr/coletores v0.0.0-20201216050911-0186b4dcc191 h1:8zhYeBAwOA9ZWym3rFOzEVOMYyA+a2H42qDBcq3/pOA=
 github.com/dadosjusbr/coletores v0.0.0-20201216050911-0186b4dcc191/go.mod h1:/MYAexbepJrBZGhKACp2ZAbRSrexfvccln0ig/0ci6E=
+github.com/dadosjusbr/indice v0.0.0-20220131215549-6c1bf83c63a3 h1:AdRnhrKQk8n76nYP6AD5mJO554lH7F1TcpN6JLrJW6E=
+github.com/dadosjusbr/indice v0.0.0-20220131215549-6c1bf83c63a3/go.mod h1:CW4xz44s/Oeu4edv4cIPPGyozNOQ3F3WF+rHwTul370=
 github.com/dadosjusbr/proto v0.0.0-20210921134625-bc3fa5eb0fd7 h1:7wiwyVzgy4VJMltz7B9wn8IyyQH3FI0bPdgIHhd30as=
 github.com/dadosjusbr/proto v0.0.0-20210921134625-bc3fa5eb0fd7/go.mod h1:a04KL3nn5wvlJTuoTYggaeokQi3njDyt9L7Ss9EQEJQ=
 github.com/dadosjusbr/proto v0.0.0-20211004174721-e51d25d61af2 h1:WYWK/7oh/Atl2fE+rHU5SGasofPVr9bCwfa5K/beFXo=
