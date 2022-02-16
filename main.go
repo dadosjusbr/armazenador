@@ -5,21 +5,23 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
-	"time"
 
 	"github.com/dadosjusbr/coletores/status"
 	"github.com/dadosjusbr/indice"
 	"github.com/dadosjusbr/proto/coleta"
 	"github.com/dadosjusbr/proto/pipeline"
+	"github.com/dadosjusbr/storage"
 	"github.com/kelseyhightower/envconfig"
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
 type config struct {
-	MongoURI   string `envconfig:"MONGODB_URI" required:"true"`
-	DBName     string `envconfig:"MONGODB_DBNAME" required:"true"`
-	MongoMICol string `envconfig:"MONGODB_MICOL" required:"true"`
-	MongoAgCol string `envconfig:"MONGODB_AGCOL" required:"true"`
+	MongoURI    string `envconfig:"MONGODB_URI" required:"true"`
+	DBName      string `envconfig:"MONGODB_DBNAME" required:"true"`
+	MongoMICol  string `envconfig:"MONGODB_MICOL" required:"true"`
+	MongoAgCol  string `envconfig:"MONGODB_AGCOL" required:"true"`
+	MongoPkgCol string `envconfig:"MONGODB_PKGCOL" required:"true"`
+
 	// Swift Conf
 	SwiftUsername  string `envconfig:"SWIFT_USERNAME" required:"true"`
 	SwiftAPIKey    string `envconfig:"SWIFT_APIKEY" required:"true"`
@@ -33,12 +35,19 @@ type config struct {
 func main() {
 	var c config
 	if err := envconfig.Process("", &c); err != nil {
-		status.ExitFromError(status.NewError(4, fmt.Errorf("Error loading config values from .env: %v", err.Error())))
+		status.ExitFromError(status.NewError(4, fmt.Errorf("error loading config values from .env: %v", err.Error())))
 	}
 
-	client, err := newClient(c)
+	db, err := storage.NewDBClient(c.MongoURI, c.DBName, c.MongoMICol, c.MongoAgCol, c.MongoPkgCol)
 	if err != nil {
-		status.ExitFromError(status.NewError(3, fmt.Errorf("newClient() error: %s", err)))
+		status.ExitFromError(status.NewError(3, fmt.Errorf("error setting up db: %s", err)))
+	}
+	client, err := storage.NewClient(
+		db,
+		storage.NewCloudClient(c.SwiftUsername, c.SwiftAPIKey, c.SwiftAuthURL, c.SwiftDomain, c.SwiftContainer),
+	)
+	if err != nil {
+		status.ExitFromError(status.NewError(3, fmt.Errorf("error setting up storage client: %s", err)))
 	}
 	var er pipeline.ResultadoExecucao
 	erIN, err := ioutil.ReadAll(os.Stdin)
@@ -71,7 +80,7 @@ func main() {
 
 	score := indice.CalcScore(*er.Rc.Metadados)
 
-	agmi := AgencyMonthlyInfo{
+	agmi := storage.AgencyMonthlyInfo{
 		AgencyID:          er.Rc.Coleta.Orgao,
 		Month:             int(er.Rc.Coleta.Mes),
 		Year:              int(er.Rc.Coleta.Ano),
@@ -82,7 +91,7 @@ func main() {
 		Backups:           backup,
 		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
 		CrawlerRepo:       er.Rc.Coleta.RepositorioColetor,
-		Meta: &Meta{
+		Meta: &storage.Meta{
 			NoLoginRequired:   er.Rc.Metadados.NaoRequerLogin,
 			NoCaptchaRequired: er.Rc.Metadados.NaoRequerCaptcha,
 			Access:            er.Rc.Metadados.Acesso.String(),
@@ -96,10 +105,13 @@ func main() {
 			OtherRecipes:      er.Rc.Metadados.OutrasReceitas.String(),
 			Expenditure:       er.Rc.Metadados.Despesas.String(),
 		},
-		Score:          score,
-		ProcInfo:       er.Rc.Procinfo,
-		Package:        packBackup,
-		ExectionTimeMs: float64(time.Since(er.Rc.Coleta.TimestampColeta.AsTime()).Milliseconds()),
+		Score: &storage.Score{
+			Score:             score.Score,
+			EasinessScore:     score.EasinessScore,
+			CompletenessScore: score.EasinessScore,
+		},
+		ProcInfo: er.Rc.Procinfo,
+		Package:  packBackup,
 	}
 	if er.Rc.Procinfo != nil && er.Rc.Procinfo.Status != 0 {
 		agmi.ProcInfo = er.Rc.Procinfo
@@ -110,24 +122,9 @@ func main() {
 	fmt.Println("Store Executed...")
 }
 
-// newClient Creates client to connect with DB and Cloud5
-func newClient(conf config) (*Client, error) {
-	db, err := NewDBClient(conf.MongoURI, conf.DBName, conf.MongoMICol, conf.MongoAgCol, "")
-	if err != nil {
-		return nil, fmt.Errorf("error creating DB client: %q", err)
-	}
-	db.Collection(conf.MongoMICol)
-	bc := NewCloudClient(conf.SwiftUsername, conf.SwiftAPIKey, conf.SwiftAuthURL, conf.SwiftDomain, conf.SwiftContainer)
-	client, err := NewClient(db, bc)
-	if err != nil {
-		return nil, fmt.Errorf("error creating storage.client: %q", err)
-	}
-	return client, nil
-}
-
 // summary aux func to make all necessary calculations to DataSummary Struct
-func summary(employees []*coleta.ContraCheque) Summary {
-	memberActive := Summary{
+func summary(employees []*coleta.ContraCheque) storage.Summary {
+	memberActive := storage.Summary{
 		IncomeHistogram: map[int]int{10000: 0, 20000: 0, 30000: 0, 40000: 0, 50000: 0, -1: 0},
 	}
 	for _, emp := range employees {
@@ -138,14 +135,14 @@ func summary(employees []*coleta.ContraCheque) Summary {
 		updateSummary(&memberActive, *emp)
 	}
 	if memberActive.Count == 0 {
-		return Summary{}
+		return storage.Summary{}
 	}
 	return memberActive
 }
 
 //updateSummary auxiliary function that updates the summary data at each employee value
-func updateSummary(s *Summary, emp coleta.ContraCheque) {
-	updateData := func(d *DataSummary, value float64, count int) {
+func updateSummary(s *storage.Summary, emp coleta.ContraCheque) {
+	updateData := func(d *storage.DataSummary, value float64, count int) {
 		if count == 1 {
 			d.Min = value
 			d.Max = value
