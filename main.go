@@ -38,14 +38,7 @@ func main() {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error loading config values from .env: %v", err.Error())))
 	}
 
-	db, err := storage.NewDBClient(c.MongoURI, c.DBName, c.MongoMICol, c.MongoAgCol, c.MongoPkgCol)
-	if err != nil {
-		status.ExitFromError(status.NewError(3, fmt.Errorf("error setting up db: %s", err)))
-	}
-	client, err := storage.NewClient(
-		db,
-		storage.NewCloudClient(c.SwiftUsername, c.SwiftAPIKey, c.SwiftAuthURL, c.SwiftDomain, c.SwiftContainer),
-	)
+	client, err := newClient(c)
 	if err != nil {
 		status.ExitFromError(status.NewError(3, fmt.Errorf("error setting up storage client: %s", err)))
 	}
@@ -188,4 +181,19 @@ func calcBaseSalary(emp coleta.ContraCheque) (float64, float64) {
 		}
 	}
 	return salaryBase, benefits
+}
+
+// newClient Creates client to connect with DB and Cloud5
+func newClient(conf config) (*storage.Client, error) {
+	db, err := storage.NewDBClient(conf.MongoURI, conf.DBName, conf.MongoMICol, conf.MongoAgCol, conf.MongoPkgCol)
+	if err != nil {
+		return nil, fmt.Errorf("error creating DB client: %q", err)
+	}
+	db.Collection(conf.MongoMICol)
+	bc := storage.NewCloudClient(conf.SwiftUsername, conf.SwiftAPIKey, conf.SwiftAuthURL, conf.SwiftDomain, conf.SwiftContainer)
+	client, err := storage.NewClient(db, bc)
+	if err != nil {
+		return nil, fmt.Errorf("error creating storage.client: %q", err)
+	}
+	return client, nil
 }
