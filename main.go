@@ -108,7 +108,7 @@ func main() {
 		Score: &storage.Score{
 			Score:             score.Score,
 			EasinessScore:     score.EasinessScore,
-			CompletenessScore: score.EasinessScore,
+			CompletenessScore: score.CompletenessScore,
 		},
 		ProcInfo: er.Rc.Procinfo,
 		Package:  packBackup,
