@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/dadosjusbr/coletores/status"
-	"github.com/dadosjusbr/indice"
 	"github.com/dadosjusbr/proto/coleta"
 	"github.com/dadosjusbr/proto/pipeline"
 	"github.com/dadosjusbr/storage"
@@ -71,8 +70,6 @@ func main() {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup files: %v, error: %v", er.Rc.Coleta.Arquivos, err)))
 	}
 
-	score := indice.CalcScore(*er.Rc.Metadados)
-
 	agmi := storage.AgencyMonthlyInfo{
 		AgencyID:          er.Rc.Coleta.Orgao,
 		Month:             int(er.Rc.Coleta.Mes),
@@ -99,9 +96,9 @@ func main() {
 			Expenditure:       er.Rc.Metadados.Despesas.String(),
 		},
 		Score: &storage.Score{
-			Score:             score.Score,
-			EasinessScore:     score.EasinessScore,
-			CompletenessScore: score.CompletenessScore,
+			Score:             float64(er.Rc.Metadados.IndiceTransparencia),
+			EasinessScore:     float64(er.Rc.Metadados.IndiceFacilidade),
+			CompletenessScore: float64(er.Rc.Metadados.IndiceCompletude),
 		},
 		ProcInfo: er.Rc.Procinfo,
 		Package:  packBackup,
