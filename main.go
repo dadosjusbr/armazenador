@@ -20,6 +20,7 @@ type config struct {
 	MongoMICol  string `envconfig:"MONGODB_MICOL" required:"true"`
 	MongoAgCol  string `envconfig:"MONGODB_AGCOL" required:"true"`
 	MongoPkgCol string `envconfig:"MONGODB_PKGCOL" required:"true"`
+	MongoRevCol string `envconfig:"MONGODB_REVCOL" required:"true"`
 
 	// Swift Conf
 	SwiftUsername  string `envconfig:"SWIFT_USERNAME" required:"true"`
@@ -182,7 +183,7 @@ func calcBaseSalary(emp coleta.ContraCheque) (float64, float64) {
 
 // newClient Creates client to connect with DB and Cloud5
 func newClient(conf config) (*storage.Client, error) {
-	db, err := storage.NewDBClient(conf.MongoURI, conf.DBName, conf.MongoMICol, conf.MongoAgCol, conf.MongoPkgCol)
+	db, err := storage.NewDBClient(conf.MongoURI, conf.DBName, conf.MongoMICol, conf.MongoAgCol, conf.MongoPkgCol, conf.MongoRevCol)
 	if err != nil {
 		return nil, fmt.Errorf("error creating DB client: %q", err)
 	}
