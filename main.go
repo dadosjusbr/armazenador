@@ -5,11 +5,13 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"time"
 
 	"github.com/dadosjusbr/coletores/status"
 	"github.com/dadosjusbr/proto/coleta"
 	"github.com/dadosjusbr/proto/pipeline"
 	"github.com/dadosjusbr/storage"
+	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 	"google.golang.org/protobuf/encoding/prototext"
 )
@@ -21,6 +23,14 @@ type config struct {
 	MongoAgCol  string `envconfig:"MONGODB_AGCOL" required:"true"`
 	MongoPkgCol string `envconfig:"MONGODB_PKGCOL" required:"true"`
 	MongoRevCol string `envconfig:"MONGODB_REVCOL" required:"true"`
+
+	PostgresUser     string `envconfig:"POSTGRES_USER" required:"true"`
+	PostgresPassword string `envconfig:"POSTGRES_PASSWORD" required:"true"`
+	PostgresDBName   string `envconfig:"POSTGRES_DBNAME" required:"true"`
+	PostgresHost     string `envconfig:"POSTGRES_HOST" required:"true"`
+	PostgresPort     string `envconfig:"POSTGRES_PORT" required:"true"`
+
+	AWSRegion string `envconfig:"AWS_REGION" required:"true"`
 
 	// Swift Conf
 	SwiftUsername  string `envconfig:"SWIFT_USERNAME" required:"true"`
@@ -34,14 +44,47 @@ type config struct {
 
 func main() {
 	var c config
+	godotenv.Load()
 	if err := envconfig.Process("", &c); err != nil {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error loading config values from .env: %v", err.Error())))
 	}
 
-	client, err := newClient(c)
+	// Criando o client do MongoDB
+	mongoDb, err := storage.NewDBClient(c.MongoURI, c.DBName, c.MongoMICol, c.MongoAgCol, c.MongoPkgCol, c.MongoRevCol)
 	if err != nil {
-		status.ExitFromError(status.NewError(3, fmt.Errorf("error setting up storage client: %s", err)))
+		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating MongoDB client: %v", err.Error())))
 	}
+	mongoDb.Collection(c.MongoMICol)
+
+	// Criando o client do Postgres
+	postgresDB, err := storage.NewPostgresDB(c.PostgresUser, c.PostgresPassword, c.PostgresDBName, c.PostgresHost, c.PostgresPort)
+	if err != nil {
+		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating PostgresDB client: %v", err.Error())))
+	}
+
+	// Criando o client do Swift
+	swift := storage.NewCloudClient(c.SwiftUsername, c.SwiftAPIKey, c.SwiftAuthURL, c.SwiftDomain, c.SwiftContainer)
+
+	// Criando o client do S3
+	s3Client, err := storage.NewS3Client(c.AWSRegion)
+	if err != nil {
+		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating S3 client: %v", err.Error())))
+	}
+
+	// Criando client do storage a partir do banco postgres e do client do s3
+	pgS3Client, err := storage.NewClient(postgresDB, s3Client)
+	if err != nil {
+		status.ExitFromError(status.NewError(3, fmt.Errorf("error setting up postgres storage client: %s", err)))
+	}
+	defer pgS3Client.Db.Disconnect()
+
+	// Criando o client do storage a partir do banco mongodb e do client do swift
+	mgoCloudClient, err := storage.NewClient(mongoDb, swift)
+	if err != nil {
+		status.ExitFromError(status.NewError(3, fmt.Errorf("error setting up mongo storage client: %s", err)))
+	}
+	defer mgoCloudClient.Db.Disconnect()
+
 	var er pipeline.ResultadoExecucao
 	erIN, err := ioutil.ReadAll(os.Stdin)
 	if err != nil {
@@ -55,9 +98,15 @@ func main() {
 	if er.Pr.Pacote == "" {
 		status.ExitFromError(status.NewError(status.InvalidInput, fmt.Errorf("there is no package to store. PackageResult:%+v", er.Pr)))
 	}
-	packBackup, err := client.Cloud.UploadFile(er.Pr.Pacote, er.Rc.Coleta.Orgao)
+	swiftBackup, err := mgoCloudClient.Cloud.UploadFile(er.Pr.Pacote, er.Rc.Coleta.Orgao)
 	if err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup package files: %v, error: %v", er.Pr.Pacote, err)))
+		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup package files from swift: %v, error: %v", er.Pr.Pacote, err)))
+	}
+
+	dstKey := fmt.Sprintf("%s/datapackage/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
+	s3Backup, err := pgS3Client.Cloud.UploadFile(er.Pr.Pacote, dstKey)
+	if err != nil {
+		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup package files from S3: %v, error: %v", er.Pr.Pacote, err)))
 	}
 
 	/*
@@ -66,57 +115,65 @@ func main() {
 			status.ExitFromError(status.NewError(2, fmt.Errorf("no backup files found: CrawlingResult:%+v", er.Cr)))
 		}
 	*/
-	backup, err := client.Cloud.Backup(er.Rc.Coleta.Arquivos, er.Rc.Coleta.Orgao)
+	swiftBackups, err := mgoCloudClient.Cloud.Backup(er.Rc.Coleta.Arquivos, er.Rc.Coleta.Orgao)
 	if err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup files: %v, error: %v", er.Rc.Coleta.Arquivos, err)))
+		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup files from Swift: %v, error: %v", er.Rc.Coleta.Arquivos, err)))
 	}
 
-	agmi := storage.AgencyMonthlyInfo{
-		AgencyID:          er.Rc.Coleta.Orgao,
-		Month:             int(er.Rc.Coleta.Mes),
-		Year:              int(er.Rc.Coleta.Ano),
-		CrawlerID:         er.Rc.Coleta.RepositorioColetor,
-		CrawlerVersion:    er.Rc.Coleta.VersaoColetor,
-		CrawlerDir:        er.Rc.Coleta.DirColetor,
-		Summary:           summary(er.Rc.Folha.ContraCheque),
-		Backups:           backup,
-		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
-		CrawlerRepo:       er.Rc.Coleta.RepositorioColetor,
+	s3Backups, err := pgS3Client.Cloud.Backup(er.Rc.Coleta.Arquivos, er.Rc.Coleta.Orgao)
+	if err != nil {
+		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup files from S3: %v, error: %v", er.Rc.Coleta.Arquivos, err)))
+	}
+
+	agmi := storage.Coleta{
+		IdOrgao:          er.Rc.Coleta.Orgao,
+		Mes:             int(er.Rc.Coleta.Mes),
+		Ano:              int(er.Rc.Coleta.Ano),
+		RepositorioColetor:         er.Rc.Coleta.RepositorioColetor,
+		VersaoColetor:    er.Rc.Coleta.VersaoColetor,
+		Sumario:           summary(er.Rc.Folha.ContraCheque),
+		Backup:           swiftBackups,
+		Timestamp: time.Unix(er.Rc.Coleta.TimestampColeta.Seconds, int64(er.Rc.Coleta.TimestampColeta.Nanos)) ,
 		Meta: &storage.Meta{
-			NoLoginRequired:   er.Rc.Metadados.NaoRequerLogin,
-			NoCaptchaRequired: er.Rc.Metadados.NaoRequerCaptcha,
-			Access:            er.Rc.Metadados.Acesso.String(),
-			Extension:         er.Rc.Metadados.Extensao.String(),
-			StrictlyTabular:   er.Rc.Metadados.EstritamenteTabular,
-			ConsistentFormat:  er.Rc.Metadados.FormatoConsistente,
-			HaveEnrollment:    er.Rc.Metadados.TemMatricula,
-			ThereIsACapacity:  er.Rc.Metadados.TemLotacao,
-			HasPosition:       er.Rc.Metadados.TemCargo,
-			BaseRevenue:       er.Rc.Metadados.ReceitaBase.String(),
-			OtherRecipes:      er.Rc.Metadados.OutrasReceitas.String(),
-			Expenditure:       er.Rc.Metadados.Despesas.String(),
+			NaoRequerLogin:   er.Rc.Metadados.NaoRequerLogin,
+			NaoRequerCaptcha: er.Rc.Metadados.NaoRequerCaptcha,
+			Acesso:            er.Rc.Metadados.Acesso.String(),
+			Extensao:         er.Rc.Metadados.Extensao.String(),
+			EstritamenteTabular:   er.Rc.Metadados.EstritamenteTabular,
+			FormatoConsistente:  er.Rc.Metadados.FormatoConsistente,
+			TemMatricula:    er.Rc.Metadados.TemMatricula,
+			TemLotacao:  er.Rc.Metadados.TemLotacao,
+			TemCargo:       er.Rc.Metadados.TemCargo,
+			DetalhamentoReceitaBase:       er.Rc.Metadados.ReceitaBase.String(),
+			DetalhamentoOutrasReceitas:      er.Rc.Metadados.OutrasReceitas.String(),
+			DetalhamentoDescontos:       er.Rc.Metadados.Despesas.String(),
 		},
-		Score: &storage.Score{
-			Score:             float64(er.Rc.Metadados.IndiceTransparencia),
-			EasinessScore:     float64(er.Rc.Metadados.IndiceFacilidade),
-			CompletenessScore: float64(er.Rc.Metadados.IndiceCompletude),
+		Indice: &storage.Indice{
+			IndiceTransparencia:             float64(er.Rc.Metadados.IndiceTransparencia),
+			IndiceFacilidade:     float64(er.Rc.Metadados.IndiceFacilidade),
+			IndiceCompletude: float64(er.Rc.Metadados.IndiceCompletude),
 		},
 		ProcInfo: er.Rc.Procinfo,
-		Package:  packBackup,
+		Package:  swiftBackup,
 	}
 	if er.Rc.Procinfo != nil && er.Rc.Procinfo.Status != 0 {
 		agmi.ProcInfo = er.Rc.Procinfo
 	}
-	if err = client.Store(agmi); err != nil {
+	if err = mgoCloudClient.Store(agmi); err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store agmi: %v", err)))
+	}
+	agmi.Package = s3Backup
+	agmi.Backup = s3Backups
+	if err = pgS3Client.Store(agmi); err != nil {
+		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store 'coleta': %v", err)))
 	}
 	fmt.Println("Store Executed...")
 }
 
 // summary aux func to make all necessary calculations to DataSummary Struct
-func summary(employees []*coleta.ContraCheque) storage.Summary {
-	memberActive := storage.Summary{
-		IncomeHistogram: map[int]int{10000: 0, 20000: 0, 30000: 0, 40000: 0, 50000: 0, -1: 0},
+func summary(employees []*coleta.ContraCheque) storage.Sumario {
+	memberActive := storage.Sumario{
+		HistogramaRenda: map[int]int{10000: 0, 20000: 0, 30000: 0, 40000: 0, 50000: 0, -1: 0},
 	}
 	for _, emp := range employees {
 		// checking if the employee instance has the required data to build the summary
@@ -125,14 +182,14 @@ func summary(employees []*coleta.ContraCheque) storage.Summary {
 		}
 		updateSummary(&memberActive, *emp)
 	}
-	if memberActive.Count == 0 {
-		return storage.Summary{}
+	if memberActive.Membros == 0 {
+		return storage.Sumario{}
 	}
 	return memberActive
 }
 
 //updateSummary auxiliary function that updates the summary data at each employee value
-func updateSummary(s *storage.Summary, emp coleta.ContraCheque) {
+func updateSummary(s *storage.Sumario, emp coleta.ContraCheque) {
 	updateData := func(d *storage.DataSummary, value float64, count int) {
 		if count == 1 {
 			d.Min = value
@@ -146,7 +203,7 @@ func updateSummary(s *storage.Summary, emp coleta.ContraCheque) {
 	}
 
 	// Income histogram.
-	s.Count++
+	s.Membros++
 	salaryBase, benefits := calcBaseSalary(emp)
 	var salaryRange int
 	if salaryBase <= 10000 {
@@ -162,10 +219,10 @@ func updateSummary(s *storage.Summary, emp coleta.ContraCheque) {
 	} else {
 		salaryRange = -1 // -1 is maker when the salary is over 50000
 	}
-	s.IncomeHistogram[salaryRange]++
+	s.HistogramaRenda[salaryRange]++
 
-	updateData(&s.BaseRemuneration, salaryBase, s.Count)
-	updateData(&s.OtherRemunerations, benefits, s.Count)
+	updateData(&s.RemuneracaoBase, salaryBase, s.Membros)
+	updateData(&s.OutrasRemuneracoes, benefits, s.Membros)
 }
 
 func calcBaseSalary(emp coleta.ContraCheque) (float64, float64) {
@@ -179,19 +236,4 @@ func calcBaseSalary(emp coleta.ContraCheque) (float64, float64) {
 		}
 	}
 	return salaryBase, benefits
-}
-
-// newClient Creates client to connect with DB and Cloud5
-func newClient(conf config) (*storage.Client, error) {
-	db, err := storage.NewDBClient(conf.MongoURI, conf.DBName, conf.MongoMICol, conf.MongoAgCol, conf.MongoPkgCol, conf.MongoRevCol)
-	if err != nil {
-		return nil, fmt.Errorf("error creating DB client: %q", err)
-	}
-	db.Collection(conf.MongoMICol)
-	bc := storage.NewCloudClient(conf.SwiftUsername, conf.SwiftAPIKey, conf.SwiftAuthURL, conf.SwiftDomain, conf.SwiftContainer)
-	client, err := storage.NewClient(db, bc)
-	if err != nil {
-		return nil, fmt.Errorf("error creating storage.client: %q", err)
-	}
-	return client, nil
 }
