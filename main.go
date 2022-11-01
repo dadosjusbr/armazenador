@@ -106,7 +106,7 @@ func main() {
 		}
 	*/
 	dstKey = fmt.Sprintf("%s/backups/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
-	s3Backups, err := pgS3Client.Cloud.Backup([]string{er.Pr.Backup}, dstKey)
+	s3Backups, err := pgS3Client.Cloud.UploadFile(er.Pr.Backup, dstKey)
 	if err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup files from S3: %v, error: %v", er.Rc.Coleta.Arquivos, err)))
 	}
@@ -133,7 +133,7 @@ func main() {
 		CrawlerID: er.Rc.Coleta.RepositorioColetor,
 		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
 		Sumario:          summary(er.Rc.Folha.ContraCheque),
-		Backup:           s3Backups,
+		Backup:           []storage.Backup{*s3Backups},
 		Timestamp: time.Unix(er.Rc.Coleta.TimestampColeta.Seconds, int64(er.Rc.Coleta.TimestampColeta.Nanos)) ,
 		Meta: storage.Meta{
 			NaoRequerLogin:   er.Rc.Metadados.NaoRequerLogin,
