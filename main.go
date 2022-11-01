@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/dadosjusbr/coletores/status"
@@ -31,6 +32,7 @@ type config struct {
 	PostgresPort     string `envconfig:"POSTGRES_PORT" required:"true"`
 
 	AWSRegion string `envconfig:"AWS_REGION" required:"true"`
+	S3Bucket string `envconfig:"S3_BUCKET" required:"true"`
 
 	// Swift Conf
 	SwiftUsername  string `envconfig:"SWIFT_USERNAME" required:"true"`
@@ -60,13 +62,8 @@ func main() {
 	postgresDB, err := storage.NewPostgresDB(c.PostgresUser, c.PostgresPassword, c.PostgresDBName, c.PostgresHost, c.PostgresPort)
 	if err != nil {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating PostgresDB client: %v", err.Error())))
-	}
-
-	// Criando o client do Swift
-	swift := storage.NewCloudClient(c.SwiftUsername, c.SwiftAPIKey, c.SwiftAuthURL, c.SwiftDomain, c.SwiftContainer)
-
-	// Criando o client do S3
-	s3Client, err := storage.NewS3Client(c.AWSRegion)
+	}	// Criando o client do S3
+	s3Client, err := storage.NewS3Client(c.AWSRegion, c.S3Bucket)
 	if err != nil {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating S3 client: %v", err.Error())))
 	}
@@ -78,8 +75,8 @@ func main() {
 	}
 	defer pgS3Client.Db.Disconnect()
 
-	// Criando o client do storage a partir do banco mongodb e do client do swift
-	mgoCloudClient, err := storage.NewClient(mongoDb, swift)
+	// Criando o client do storage a partir do banco mongodb e do client do s3
+	mgoCloudClient, err := storage.NewClient(mongoDb, s3Client)
 	if err != nil {
 		status.ExitFromError(status.NewError(3, fmt.Errorf("error setting up mongo storage client: %s", err)))
 	}
@@ -98,43 +95,49 @@ func main() {
 	if er.Pr.Pacote == "" {
 		status.ExitFromError(status.NewError(status.InvalidInput, fmt.Errorf("there is no package to store. PackageResult:%+v", er.Pr)))
 	}
-	swiftBackup, err := mgoCloudClient.Cloud.UploadFile(er.Pr.Pacote, er.Rc.Coleta.Orgao)
-	if err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup package files from swift: %v, error: %v", er.Pr.Pacote, err)))
-	}
 
 	dstKey := fmt.Sprintf("%s/datapackage/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
 	s3Backup, err := pgS3Client.Cloud.UploadFile(er.Pr.Pacote, dstKey)
 	if err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup package files from S3: %v, error: %v", er.Pr.Pacote, err)))
 	}
-
 	/*
 		// Backup.
 		if !c.IgnoreBackups && len(er.Cr.Files) == 0 {
 			status.ExitFromError(status.NewError(2, fmt.Errorf("no backup files found: CrawlingResult:%+v", er.Cr)))
 		}
 	*/
-	swiftBackups, err := mgoCloudClient.Cloud.Backup(er.Rc.Coleta.Arquivos, er.Rc.Coleta.Orgao)
-	if err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup files from Swift: %v, error: %v", er.Rc.Coleta.Arquivos, err)))
-	}
-
-	s3Backups, err := pgS3Client.Cloud.Backup(er.Rc.Coleta.Arquivos, er.Rc.Coleta.Orgao)
+	dstKey = fmt.Sprintf("%s/backups/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
+	s3Backups, err := pgS3Client.Cloud.Backup(er.Rc.Coleta.Arquivos, dstKey)
 	if err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup files from S3: %v, error: %v", er.Rc.Coleta.Arquivos, err)))
 	}
 
+	var parserRepository string
+	var parserVersion string
+	for _, v := range []string{"mpma", "mprr", "mpms", "mpsc", "mpam", "mpac", "mprs", "mpap", "mpro", "cnj"}{
+		if strings.Contains(er.Rc.Coleta.Orgao, v){
+			parserRepository = fmt.Sprintf("https://github.com/dadosjusbr/parser-%s", er.Rc.Coleta.Orgao)
+			parserVersion = "unspecified"
+			break
+		}
+	}
+
 	agmi := storage.Coleta{
+		ID: 					 er.Rc.Coleta.ChaveColeta,
 		IdOrgao:          er.Rc.Coleta.Orgao,
 		Mes:             int(er.Rc.Coleta.Mes),
 		Ano:              int(er.Rc.Coleta.Ano),
 		RepositorioColetor:         er.Rc.Coleta.RepositorioColetor,
 		VersaoColetor:    er.Rc.Coleta.VersaoColetor,
-		Sumario:           summary(er.Rc.Folha.ContraCheque),
-		Backup:           swiftBackups,
+		RepositorioParser: parserRepository,
+		VersaoParser: 	 parserVersion,
+		CrawlerID: er.Rc.Coleta.RepositorioColetor,
+		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
+		Sumario:          summary(er.Rc.Folha.ContraCheque),
+		Backup:           s3Backups,
 		Timestamp: time.Unix(er.Rc.Coleta.TimestampColeta.Seconds, int64(er.Rc.Coleta.TimestampColeta.Nanos)) ,
-		Meta: &storage.Meta{
+		Meta: storage.Meta{
 			NaoRequerLogin:   er.Rc.Metadados.NaoRequerLogin,
 			NaoRequerCaptcha: er.Rc.Metadados.NaoRequerCaptcha,
 			Acesso:            er.Rc.Metadados.Acesso.String(),
@@ -148,13 +151,13 @@ func main() {
 			DetalhamentoOutrasReceitas:      er.Rc.Metadados.OutrasReceitas.String(),
 			DetalhamentoDescontos:       er.Rc.Metadados.Despesas.String(),
 		},
-		Indice: &storage.Indice{
+		Indice: storage.Indice{
 			IndiceTransparencia:             float64(er.Rc.Metadados.IndiceTransparencia),
 			IndiceFacilidade:     float64(er.Rc.Metadados.IndiceFacilidade),
 			IndiceCompletude: float64(er.Rc.Metadados.IndiceCompletude),
 		},
 		ProcInfo: er.Rc.Procinfo,
-		Package:  swiftBackup,
+		Package:  s3Backup,
 	}
 	if er.Rc.Procinfo != nil && er.Rc.Procinfo.Status != 0 {
 		agmi.ProcInfo = er.Rc.Procinfo
@@ -162,8 +165,6 @@ func main() {
 	if err = mgoCloudClient.Store(agmi); err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store agmi: %v", err)))
 	}
-	agmi.Package = s3Backup
-	agmi.Backup = s3Backups
 	if err = pgS3Client.Store(agmi); err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store 'coleta': %v", err)))
 	}
