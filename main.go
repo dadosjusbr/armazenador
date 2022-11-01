@@ -12,7 +12,6 @@ import (
 	"github.com/dadosjusbr/proto/coleta"
 	"github.com/dadosjusbr/proto/pipeline"
 	"github.com/dadosjusbr/storage"
-	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 	"google.golang.org/protobuf/encoding/prototext"
 )
@@ -46,7 +45,6 @@ type config struct {
 
 func main() {
 	var c config
-	godotenv.Load()
 	if err := envconfig.Process("", &c); err != nil {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error loading config values from .env: %v", err.Error())))
 	}
@@ -108,7 +106,7 @@ func main() {
 		}
 	*/
 	dstKey = fmt.Sprintf("%s/backups/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
-	s3Backups, err := pgS3Client.Cloud.Backup(er.Rc.Coleta.Arquivos, dstKey)
+	s3Backups, err := pgS3Client.Cloud.Backup([]string{er.Pr.Backup}, dstKey)
 	if err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup files from S3: %v, error: %v", er.Rc.Coleta.Arquivos, err)))
 	}
