@@ -22,12 +22,6 @@ type config struct {
 	MongoPkgCol string `envconfig:"MONGODB_PKGCOL" required:"true"`
 	MongoRevCol string `envconfig:"MONGODB_REVCOL" required:"true"`
 
-	PostgresUser     string `envconfig:"POSTGRES_USER" required:"true"`
-	PostgresPassword string `envconfig:"POSTGRES_PASSWORD" required:"true"`
-	PostgresDBName   string `envconfig:"POSTGRES_DBNAME" required:"true"`
-	PostgresHost     string `envconfig:"POSTGRES_HOST" required:"true"`
-	PostgresPort     string `envconfig:"POSTGRES_PORT" required:"true"`
-
 	AWSRegion string `envconfig:"AWS_REGION" required:"true"`
 	S3Bucket string `envconfig:"S3_BUCKET" required:"true"`
 	AWSAccessKey string `envconfig:"AWS_ACCESS_KEY_ID" required:"true"`
