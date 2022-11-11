@@ -22,8 +22,8 @@ type config struct {
 	MongoPkgCol string `envconfig:"MONGODB_PKGCOL" required:"true"`
 	MongoRevCol string `envconfig:"MONGODB_REVCOL" required:"true"`
 
-	AWSRegion string `envconfig:"AWS_REGION" required:"true"`
-	S3Bucket string `envconfig:"S3_BUCKET" required:"true"`
+	AWSRegion    string `envconfig:"AWS_REGION" required:"true"`
+	S3Bucket     string `envconfig:"S3_BUCKET" required:"true"`
 	AWSAccessKey string `envconfig:"AWS_ACCESS_KEY_ID" required:"true"`
 	AWSSecretKey string `envconfig:"AWS_SECRET_ACCESS_KEY" required:"true"`
 
@@ -98,15 +98,16 @@ func main() {
 		AgencyID:          er.Rc.Coleta.Orgao,
 		Month:             int(er.Rc.Coleta.Mes),
 		Year:              int(er.Rc.Coleta.Ano),
-		CrawlerRepo:         er.Rc.Coleta.RepositorioColetor,
+		CrawlerRepo:       er.Rc.Coleta.RepositorioColetor,
 		CrawlerVersion:    er.Rc.Coleta.VersaoColetor,
-		CrawlerID: er.Rc.Coleta.RepositorioColetor,
+		CrawlerID:         er.Rc.Coleta.RepositorioColetor,
 		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
-		Summary:          summary(er.Rc.Folha.ContraCheque),
-		Backups:          []storage.Backup{*s3Backups},
+		Summary:           summary(er.Rc.Folha.ContraCheque),
+		Backups:           []storage.Backup{*s3Backups},
 		Meta: &storage.Meta{
 			NoLoginRequired:   er.Rc.Metadados.NaoRequerLogin,
 			NoCaptchaRequired: er.Rc.Metadados.NaoRequerCaptcha,
+			OpenFormat:        er.Rc.Metadados.FormatoAberto,
 			Access:            er.Rc.Metadados.Acesso.String(),
 			Extension:         er.Rc.Metadados.Extensao.String(),
 			StrictlyTabular:   er.Rc.Metadados.EstritamenteTabular,
