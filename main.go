@@ -145,6 +145,7 @@ func main() {
 		Summary:           summary(er.Rc.Folha.ContraCheque),
 		Backups:           []storage.Backup{*s3Backups},
 		Meta: storage.Meta{
+			OpenFormat: er.Rc.Metadados.FormatoAberto,
 			Access:           er.Rc.Metadados.Acesso.String(),
 			Extension:        er.Rc.Metadados.Extensao.String(),
 			StrictlyTabular:  er.Rc.Metadados.EstritamenteTabular,
