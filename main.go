@@ -2,18 +2,17 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
-	"math"
-	"os"
-	"strings"
-	"time"
-
 	"github.com/dadosjusbr/coletores/status"
 	"github.com/dadosjusbr/proto/coleta"
 	"github.com/dadosjusbr/proto/pipeline"
 	"github.com/dadosjusbr/storage"
+	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 	"google.golang.org/protobuf/encoding/prototext"
+	"io/ioutil"
+	"math"
+	"os"
+	"strings"
 )
 
 type config struct {
@@ -31,7 +30,7 @@ type config struct {
 	PostgresPort     string `envconfig:"POSTGRES_PORT" required:"true"`
 
 	AWSRegion string `envconfig:"AWS_REGION" required:"true"`
-	S3Bucket string `envconfig:"S3_BUCKET" required:"true"`
+	S3Bucket  string `envconfig:"S3_BUCKET" required:"true"`
 
 	// Swift Conf
 	SwiftUsername  string `envconfig:"SWIFT_USERNAME" required:"true"`
@@ -45,6 +44,7 @@ type config struct {
 
 func main() {
 	var c config
+	godotenv.Load()
 	if err := envconfig.Process("", &c); err != nil {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error loading config values from .env: %v", err.Error())))
 	}
@@ -60,7 +60,7 @@ func main() {
 	postgresDB, err := storage.NewPostgresDB(c.PostgresUser, c.PostgresPassword, c.PostgresDBName, c.PostgresHost, c.PostgresPort)
 	if err != nil {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating PostgresDB client: %v", err.Error())))
-	}	// Criando o client do S3
+	} // Criando o client do S3
 	s3Client, err := storage.NewS3Client(c.AWSRegion, c.S3Bucket)
 	if err != nil {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating S3 client: %v", err.Error())))
@@ -106,53 +106,50 @@ func main() {
 		}
 	*/
 	dstKey = fmt.Sprintf("%s/backups/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
-	s3Backups, err := pgS3Client.Cloud.UploadFile(er.Pr.Backup, dstKey)
+	s3Backups, err := pgS3Client.Cloud.UploadFile(er.Rc.Coleta.Arquivos[0], dstKey)
 	if err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup files from S3: %v, error: %v", er.Rc.Coleta.Arquivos, err)))
 	}
 
 	var parserRepository string
 	var parserVersion string
-	for _, v := range []string{"mpma", "mprr", "mpms", "mpsc", "mpam", "mpac", "mprs", "mpap", "mpro", "cnj"}{
-		if strings.Contains(er.Rc.Coleta.Orgao, v){
+	for _, v := range []string{"mpma", "mprr", "mpms", "mpsc", "mpam", "mpac", "mprs", "mpap", "mpro", "cnj"} {
+		if strings.Contains(er.Rc.Coleta.Orgao, v) {
 			parserRepository = fmt.Sprintf("https://github.com/dadosjusbr/parser-%s", er.Rc.Coleta.Orgao)
 			parserVersion = "unspecified"
 			break
 		}
 	}
 
-	agmi := storage.Coleta{
-		ID: 					 er.Rc.Coleta.ChaveColeta,
-		IdOrgao:          er.Rc.Coleta.Orgao,
-		Mes:             int(er.Rc.Coleta.Mes),
-		Ano:              int(er.Rc.Coleta.Ano),
-		RepositorioColetor:         er.Rc.Coleta.RepositorioColetor,
-		VersaoColetor:    er.Rc.Coleta.VersaoColetor,
-		RepositorioParser: parserRepository,
-		VersaoParser: 	 parserVersion,
-		CrawlerID: er.Rc.Coleta.RepositorioColetor,
+	agmi := storage.AgencyMonthlyInfo{
+		ID:                er.Rc.Coleta.ChaveColeta,
+		AgencyID:          er.Rc.Coleta.Orgao,
+		Month:             int(er.Rc.Coleta.Mes),
+		Year:              int(er.Rc.Coleta.Ano),
+		CrawlerRepo:       er.Rc.Coleta.RepositorioColetor,
+		CrawlerVersion:    er.Rc.Coleta.VersaoColetor,
+		ParserRepo:        parserRepository,
+		ParserVersion:     parserVersion,
+		CrawlerID:         er.Rc.Coleta.RepositorioColetor,
 		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
-		Sumario:          summary(er.Rc.Folha.ContraCheque),
-		Backup:           []storage.Backup{*s3Backups},
-		Timestamp: time.Unix(er.Rc.Coleta.TimestampColeta.Seconds, int64(er.Rc.Coleta.TimestampColeta.Nanos)) ,
+		Summary:           summary(er.Rc.Folha.ContraCheque),
+		Backups:           []storage.Backup{*s3Backups},
 		Meta: storage.Meta{
-			NaoRequerLogin:   er.Rc.Metadados.NaoRequerLogin,
-			NaoRequerCaptcha: er.Rc.Metadados.NaoRequerCaptcha,
-			Acesso:            er.Rc.Metadados.Acesso.String(),
-			Extensao:         er.Rc.Metadados.Extensao.String(),
-			EstritamenteTabular:   er.Rc.Metadados.EstritamenteTabular,
-			FormatoConsistente:  er.Rc.Metadados.FormatoConsistente,
-			TemMatricula:    er.Rc.Metadados.TemMatricula,
-			TemLotacao:  er.Rc.Metadados.TemLotacao,
-			TemCargo:       er.Rc.Metadados.TemCargo,
-			DetalhamentoReceitaBase:       er.Rc.Metadados.ReceitaBase.String(),
-			DetalhamentoOutrasReceitas:      er.Rc.Metadados.OutrasReceitas.String(),
-			DetalhamentoDescontos:       er.Rc.Metadados.Despesas.String(),
+			Access:           er.Rc.Metadados.Acesso.String(),
+			Extension:        er.Rc.Metadados.Extensao.String(),
+			StrictlyTabular:  er.Rc.Metadados.EstritamenteTabular,
+			ConsistentFormat: er.Rc.Metadados.FormatoConsistente,
+			HaveEnrollment:   er.Rc.Metadados.TemMatricula,
+			ThereIsACapacity: er.Rc.Metadados.TemLotacao,
+			HasPosition:      er.Rc.Metadados.TemCargo,
+			BaseRevenue:      er.Rc.Metadados.ReceitaBase.String(),
+			OtherRecipes:     er.Rc.Metadados.OutrasReceitas.String(),
+			Expenditure:      er.Rc.Metadados.Despesas.String(),
 		},
-		Indice: storage.Indice{
-			IndiceTransparencia:             float64(er.Rc.Metadados.IndiceTransparencia),
-			IndiceFacilidade:     float64(er.Rc.Metadados.IndiceFacilidade),
-			IndiceCompletude: float64(er.Rc.Metadados.IndiceCompletude),
+		Score: storage.Score{
+			Score:             float64(er.Rc.Metadados.IndiceTransparencia),
+			EasinessScore:     float64(er.Rc.Metadados.IndiceFacilidade),
+			CompletenessScore: float64(er.Rc.Metadados.IndiceCompletude),
 		},
 		ProcInfo: er.Rc.Procinfo,
 		Package:  s3Backup,
@@ -170,9 +167,9 @@ func main() {
 }
 
 // summary aux func to make all necessary calculations to DataSummary Struct
-func summary(employees []*coleta.ContraCheque) storage.Sumario {
-	memberActive := storage.Sumario{
-		HistogramaRenda: map[int]int{10000: 0, 20000: 0, 30000: 0, 40000: 0, 50000: 0, -1: 0},
+func summary(employees []*coleta.ContraCheque) storage.Summary {
+	memberActive := storage.Summary{
+		IncomeHistogram: map[int]int{10000: 0, 20000: 0, 30000: 0, 40000: 0, 50000: 0, -1: 0},
 	}
 	for _, emp := range employees {
 		// checking if the employee instance has the required data to build the summary
@@ -181,14 +178,14 @@ func summary(employees []*coleta.ContraCheque) storage.Sumario {
 		}
 		updateSummary(&memberActive, *emp)
 	}
-	if memberActive.Membros == 0 {
-		return storage.Sumario{}
+	if memberActive.Count == 0 {
+		return storage.Summary{}
 	}
 	return memberActive
 }
 
 //updateSummary auxiliary function that updates the summary data at each employee value
-func updateSummary(s *storage.Sumario, emp coleta.ContraCheque) {
+func updateSummary(s *storage.Summary, emp coleta.ContraCheque) {
 	updateData := func(d *storage.DataSummary, value float64, count int) {
 		if count == 1 {
 			d.Min = value
@@ -202,7 +199,7 @@ func updateSummary(s *storage.Sumario, emp coleta.ContraCheque) {
 	}
 
 	// Income histogram.
-	s.Membros++
+	s.Count++
 	salaryBase, benefits := calcBaseSalary(emp)
 	var salaryRange int
 	if salaryBase <= 10000 {
@@ -218,10 +215,10 @@ func updateSummary(s *storage.Sumario, emp coleta.ContraCheque) {
 	} else {
 		salaryRange = -1 // -1 is maker when the salary is over 50000
 	}
-	s.HistogramaRenda[salaryRange]++
+	s.IncomeHistogram[salaryRange]++
 
-	updateData(&s.RemuneracaoBase, salaryBase, s.Membros)
-	updateData(&s.OutrasRemuneracoes, benefits, s.Membros)
+	updateData(&s.BaseRemuneration, salaryBase, s.Count)
+	updateData(&s.OtherRemunerations, benefits, s.Count)
 }
 
 func calcBaseSalary(emp coleta.ContraCheque) (float64, float64) {

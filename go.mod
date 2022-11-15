@@ -4,12 +4,12 @@ go 1.14
 
 require (
 	github.com/dadosjusbr/coletores v0.0.0-20210928113650-4c03e4fa3b74
-	github.com/dadosjusbr/datapackage v0.0.0-20220719165647-820537e28895 // indirect
 	github.com/dadosjusbr/proto v0.0.0-20220304160723-47e93e9d97b5
 	github.com/dadosjusbr/storage v0.0.0-20220405122007-fb014bcf1895
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/gocarina/gocsv v0.0.0-20220310154401-d4df709ca055 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
+	github.com/joho/godotenv v1.4.0
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/klauspost/compress v1.15.1 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
