@@ -2,6 +2,11 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
+	"math"
+	"os"
+	"strings"
+
 	"github.com/dadosjusbr/coletores/status"
 	"github.com/dadosjusbr/proto/coleta"
 	"github.com/dadosjusbr/proto/pipeline"
@@ -9,10 +14,6 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 	"google.golang.org/protobuf/encoding/prototext"
-	"io/ioutil"
-	"math"
-	"os"
-	"strings"
 )
 
 type config struct {
@@ -29,8 +30,10 @@ type config struct {
 	PostgresHost     string `envconfig:"POSTGRES_HOST" required:"true"`
 	PostgresPort     string `envconfig:"POSTGRES_PORT" required:"true"`
 
-	AWSRegion string `envconfig:"AWS_REGION" required:"true"`
-	S3Bucket  string `envconfig:"S3_BUCKET" required:"true"`
+	AWSRegion    string `envconfig:"AWS_REGION" required:"true"`
+	S3Bucket     string `envconfig:"S3_BUCKET" required:"true"`
+	AWSAccessKey string `envconfig:"AWS_ACCESS_KEY_ID" required:"true"`
+	AWSSecretKey string `envconfig:"AWS_SECRET_ACCESS_KEY" required:"true"`
 
 	// Swift Conf
 	SwiftUsername  string `envconfig:"SWIFT_USERNAME" required:"true"`
@@ -60,7 +63,8 @@ func main() {
 	postgresDB, err := storage.NewPostgresDB(c.PostgresUser, c.PostgresPassword, c.PostgresDBName, c.PostgresHost, c.PostgresPort)
 	if err != nil {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating PostgresDB client: %v", err.Error())))
-	} // Criando o client do S3
+	} 
+	// Criando o client do S3
 	s3Client, err := storage.NewS3Client(c.AWSRegion, c.S3Bucket)
 	if err != nil {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating S3 client: %v", err.Error())))
@@ -74,11 +78,11 @@ func main() {
 	defer pgS3Client.Db.Disconnect()
 
 	// Criando o client do storage a partir do banco mongodb e do client do s3
-	mgoCloudClient, err := storage.NewClient(mongoDb, s3Client)
+	mgoS3Client, err := storage.NewClient(mongoDb, s3Client)
 	if err != nil {
 		status.ExitFromError(status.NewError(3, fmt.Errorf("error setting up mongo storage client: %s", err)))
 	}
-	defer mgoCloudClient.Db.Disconnect()
+	defer mgoS3Client.Db.Disconnect()
 
 	var er pipeline.ResultadoExecucao
 	erIN, err := ioutil.ReadAll(os.Stdin)
@@ -109,6 +113,12 @@ func main() {
 	s3Backups, err := pgS3Client.Cloud.UploadFile(er.Rc.Coleta.Arquivos[0], dstKey)
 	if err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup files from S3: %v, error: %v", er.Rc.Coleta.Arquivos, err)))
+	}
+
+	dstKey = fmt.Sprintf("%s/remuneracoes/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
+	_, err = mgoS3Client.Cloud.UploadFile(er.Pr.Remuneracoes, dstKey)
+	if err != nil {
+		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to upload Remunerations zip in S3: %v, error: %v", er.Pr.Remuneracoes, err)))
 	}
 
 	var parserRepository string
@@ -157,7 +167,7 @@ func main() {
 	if er.Rc.Procinfo != nil && er.Rc.Procinfo.Status != 0 {
 		agmi.ProcInfo = er.Rc.Procinfo
 	}
-	if err = mgoCloudClient.Store(agmi); err != nil {
+	if err = mgoS3Client.Store(agmi); err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store agmi: %v", err)))
 	}
 	if err = pgS3Client.Store(agmi); err != nil {
