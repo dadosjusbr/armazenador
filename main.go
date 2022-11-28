@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/dadosjusbr/storage/repositories/database/postgres"
+	"github.com/dadosjusbr/storage/repositories/fileStorage"
 	"io/ioutil"
 	"math"
 	"os"
@@ -11,6 +13,8 @@ import (
 	"github.com/dadosjusbr/proto/coleta"
 	"github.com/dadosjusbr/proto/pipeline"
 	"github.com/dadosjusbr/storage"
+	"github.com/dadosjusbr/storage/models"
+	"github.com/dadosjusbr/storage/repositories/database/mongo"
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 	"google.golang.org/protobuf/encoding/prototext"
@@ -53,19 +57,19 @@ func main() {
 	}
 
 	// Criando o client do MongoDB
-	mongoDb, err := storage.NewDBClient(c.MongoURI, c.DBName, c.MongoMICol, c.MongoAgCol, c.MongoPkgCol, c.MongoRevCol)
+	mongoDb, err := mongo.NewMongoDB(c.MongoURI, c.DBName, c.MongoMICol, c.MongoAgCol, c.MongoPkgCol, c.MongoRevCol)
 	if err != nil {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating MongoDB client: %v", err.Error())))
 	}
 	mongoDb.Collection(c.MongoMICol)
 
 	// Criando o client do Postgres
-	postgresDB, err := storage.NewPostgresDB(c.PostgresUser, c.PostgresPassword, c.PostgresDBName, c.PostgresHost, c.PostgresPort)
+	postgresDB, err := postgres.NewPostgresDB(c.PostgresUser, c.PostgresPassword, c.PostgresDBName, c.PostgresHost, c.PostgresPort)
 	if err != nil {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating PostgresDB client: %v", err.Error())))
-	} 
+	}
 	// Criando o client do S3
-	s3Client, err := storage.NewS3Client(c.AWSRegion, c.S3Bucket)
+	s3Client, err := fileStorage.NewS3Client(c.AWSRegion, c.S3Bucket)
 	if err != nil {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating S3 client: %v", err.Error())))
 	}
@@ -131,8 +135,7 @@ func main() {
 		}
 	}
 
-	agmi := storage.AgencyMonthlyInfo{
-		ID:                er.Rc.Coleta.ChaveColeta,
+	agmi := models.AgencyMonthlyInfo{
 		AgencyID:          er.Rc.Coleta.Orgao,
 		Month:             int(er.Rc.Coleta.Mes),
 		Year:              int(er.Rc.Coleta.Ano),
@@ -140,12 +143,11 @@ func main() {
 		CrawlerVersion:    er.Rc.Coleta.VersaoColetor,
 		ParserRepo:        parserRepository,
 		ParserVersion:     parserVersion,
-		CrawlerID:         er.Rc.Coleta.RepositorioColetor,
 		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
 		Summary:           summary(er.Rc.Folha.ContraCheque),
-		Backups:           []storage.Backup{*s3Backups},
-		Meta: storage.Meta{
-			OpenFormat: er.Rc.Metadados.FormatoAberto,
+		Backups:           *s3Backups,
+		Meta: &models.Meta{
+			OpenFormat:       er.Rc.Metadados.FormatoAberto,
 			Access:           er.Rc.Metadados.Acesso.String(),
 			Extension:        er.Rc.Metadados.Extensao.String(),
 			StrictlyTabular:  er.Rc.Metadados.EstritamenteTabular,
@@ -157,7 +159,7 @@ func main() {
 			OtherRecipes:     er.Rc.Metadados.OutrasReceitas.String(),
 			Expenditure:      er.Rc.Metadados.Despesas.String(),
 		},
-		Score: storage.Score{
+		Score: &models.Score{
 			Score:             float64(er.Rc.Metadados.IndiceTransparencia),
 			EasinessScore:     float64(er.Rc.Metadados.IndiceFacilidade),
 			CompletenessScore: float64(er.Rc.Metadados.IndiceCompletude),
@@ -178,8 +180,8 @@ func main() {
 }
 
 // summary aux func to make all necessary calculations to DataSummary Struct
-func summary(employees []*coleta.ContraCheque) storage.Summary {
-	memberActive := storage.Summary{
+func summary(employees []*coleta.ContraCheque) models.Summary {
+	memberActive := models.Summary{
 		IncomeHistogram: map[int]int{10000: 0, 20000: 0, 30000: 0, 40000: 0, 50000: 0, -1: 0},
 	}
 	for _, emp := range employees {
@@ -190,14 +192,14 @@ func summary(employees []*coleta.ContraCheque) storage.Summary {
 		updateSummary(&memberActive, *emp)
 	}
 	if memberActive.Count == 0 {
-		return storage.Summary{}
+		return models.Summary{}
 	}
 	return memberActive
 }
 
 //updateSummary auxiliary function that updates the summary data at each employee value
-func updateSummary(s *storage.Summary, emp coleta.ContraCheque) {
-	updateData := func(d *storage.DataSummary, value float64, count int) {
+func updateSummary(s *models.Summary, emp coleta.ContraCheque) {
+	updateData := func(d *models.DataSummary, value float64, count int) {
 		if count == 1 {
 			d.Min = value
 			d.Max = value
