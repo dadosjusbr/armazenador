@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/dadosjusbr/storage/repositories/database/postgres"
-	"github.com/dadosjusbr/storage/repositories/fileStorage"
 	"io/ioutil"
 	"math"
 	"os"
 	"strings"
+
+	"github.com/dadosjusbr/storage/repositories/database/postgres"
+	"github.com/dadosjusbr/storage/repositories/fileStorage"
 
 	"github.com/dadosjusbr/coletores/status"
 	"github.com/dadosjusbr/proto/coleta"
@@ -102,6 +103,7 @@ func main() {
 		status.ExitFromError(status.NewError(status.InvalidInput, fmt.Errorf("there is no package to store. PackageResult:%+v", er.Pr)))
 	}
 
+	//Armazenando os datapackages no S3
 	dstKey := fmt.Sprintf("%s/datapackage/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
 	s3Backup, err := pgS3Client.Cloud.UploadFile(er.Pr.Pacote, dstKey)
 	if err != nil {
@@ -113,16 +115,30 @@ func main() {
 			status.ExitFromError(status.NewError(2, fmt.Errorf("no backup files found: CrawlingResult:%+v", er.Cr)))
 		}
 	*/
+	//Armazenando os backups no S3
 	dstKey = fmt.Sprintf("%s/backups/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
 	s3Backups, err := pgS3Client.Cloud.UploadFile(er.Rc.Coleta.Arquivos[0], dstKey)
 	if err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup files from S3: %v, error: %v", er.Rc.Coleta.Arquivos, err)))
 	}
 
+	//Armazenando as remuneracoes no S3 e no postgres
 	dstKey = fmt.Sprintf("%s/remuneracoes/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
-	_, err = mgoS3Client.Cloud.UploadFile(er.Pr.Remuneracoes, dstKey)
+	_, err = mgoS3Client.Cloud.UploadFile(er.Pr.Remuneracoes.ZipUrl, dstKey)
 	if err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to upload Remunerations zip in S3: %v, error: %v", er.Pr.Remuneracoes, err)))
+	}
+	err = pgS3Client.StoreRemunerations(models.Remunerations{
+		AgencyID: er.Rc.Coleta.Orgao,
+		Year:     int(er.Rc.Coleta.Ano),
+		Month:    int(er.Rc.Coleta.Mes),
+		NumBase: int(er.Pr.Remuneracoes.NumBase),
+		NumOther: int(er.Pr.Remuneracoes.NumOutras),
+		NumDiscounts: int(er.Pr.Remuneracoes.NumDescontos),
+		ZipUrl: fmt.Sprintf("https://%s.s3.amazonaws.com/%s", c.S3Bucket, dstKey),
+	})
+	if err != nil {
+		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store Remunerations zip in Postgres: %v, error: %v", er.Pr.Remuneracoes, err)))
 	}
 
 	var parserRepository string
