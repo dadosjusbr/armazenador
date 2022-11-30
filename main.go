@@ -95,7 +95,7 @@ func main() {
 	}
 
 	dstKey = fmt.Sprintf("%s/remuneracoes/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
-	_, err = mgoS3Client.Cloud.UploadFile(er.Pr.Remuneracoes, dstKey)
+	_, err = mgoS3Client.Cloud.UploadFile(er.Pr.Remuneracoes.ZipUrl, dstKey)
 	if err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to upload Remunerations zip in S3: %v, error: %v", er.Pr.Remuneracoes, err)))
 	}
