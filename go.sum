@@ -26,12 +26,8 @@ github.com/creack/pty v1.1.7/go.mod h1:lj5s0c3V2DBrqTV7llrYr5NG6My20zk30Fl46Y7Do
 github.com/dadosjusbr/coletores v0.0.0-20201216050911-0186b4dcc191/go.mod h1:/MYAexbepJrBZGhKACp2ZAbRSrexfvccln0ig/0ci6E=
 github.com/dadosjusbr/coletores v0.0.0-20210928113650-4c03e4fa3b74 h1:biTIncJC0XYYqAVEJHJRI5dTUgEp9K7AfTrUj9JzvNc=
 github.com/dadosjusbr/coletores v0.0.0-20210928113650-4c03e4fa3b74/go.mod h1:m9opDykSJIwaf+veICpleWMranaaWEbx5RNQhKZAgXU=
-github.com/dadosjusbr/proto v0.0.0-20221111143805-a41e9c57346c h1:AC8emyvDGDWay68+wvRilvHpm2//8LcOR3nFjGA5xEk=
-github.com/dadosjusbr/proto v0.0.0-20221111143805-a41e9c57346c/go.mod h1:gPA7VxjEmyez/xtln4qBj+tM1NO0/zcw3ryjxTRNSco=
 github.com/dadosjusbr/proto v0.0.0-20221129132150-665052871cc7 h1:M/z08rG0utrFOZT/TUL4c6UHaEF8+Y9X79tBUKJ6N7o=
 github.com/dadosjusbr/proto v0.0.0-20221129132150-665052871cc7/go.mod h1:gPA7VxjEmyez/xtln4qBj+tM1NO0/zcw3ryjxTRNSco=
-github.com/dadosjusbr/storage v0.0.0-20221122134340-3ce1c77edc17 h1:rFxSaMbxi+6/56zFyg078GNQTQH/yyWrY8tq1h095RI=
-github.com/dadosjusbr/storage v0.0.0-20221122134340-3ce1c77edc17/go.mod h1:doTYxo3/EkznA2THlAccu6tSiO/2Sh+IHEZjyEfCjEQ=
 github.com/dadosjusbr/storage v0.0.0-20221201144124-f030c961b0f8 h1:XhIL72uQcoOg1vZHrlqW1NjyFAOjtjIyOkSTOcK6cAI=
 github.com/dadosjusbr/storage v0.0.0-20221201144124-f030c961b0f8/go.mod h1:91TBWFx78Uub9pBj8eQRmsXKMMC5xhqKzWC4/W9O2aw=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
