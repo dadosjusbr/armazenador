@@ -16,7 +16,6 @@ import (
 	"github.com/dadosjusbr/storage"
 	"github.com/dadosjusbr/storage/models"
 	"github.com/dadosjusbr/storage/repositories/database/mongo"
-	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 	"google.golang.org/protobuf/encoding/prototext"
 )
@@ -52,7 +51,6 @@ type config struct {
 
 func main() {
 	var c config
-	godotenv.Load()
 	if err := envconfig.Process("", &c); err != nil {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error loading config values from .env: %v", err.Error())))
 	}
@@ -129,13 +127,13 @@ func main() {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to upload Remunerations zip in S3: %v, error: %v", er.Pr.Remuneracoes, err)))
 	}
 	err = pgS3Client.StoreRemunerations(models.Remunerations{
-		AgencyID: er.Rc.Coleta.Orgao,
-		Year:     int(er.Rc.Coleta.Ano),
-		Month:    int(er.Rc.Coleta.Mes),
-		NumBase: int(er.Pr.Remuneracoes.NumBase),
-		NumOther: int(er.Pr.Remuneracoes.NumOutras),
+		AgencyID:     er.Rc.Coleta.Orgao,
+		Year:         int(er.Rc.Coleta.Ano),
+		Month:        int(er.Rc.Coleta.Mes),
+		NumBase:      int(er.Pr.Remuneracoes.NumBase),
+		NumOther:     int(er.Pr.Remuneracoes.NumOutras),
 		NumDiscounts: int(er.Pr.Remuneracoes.NumDescontos),
-		ZipUrl: fmt.Sprintf("https://%s.s3.amazonaws.com/%s", c.S3Bucket, dstKey),
+		ZipUrl:       fmt.Sprintf("https://%s.s3.amazonaws.com/%s", c.S3Bucket, dstKey),
 	})
 	if err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store Remunerations zip in Postgres: %v, error: %v", er.Pr.Remuneracoes, err)))
