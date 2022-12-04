@@ -159,7 +159,7 @@ func main() {
 		ParserVersion:     parserVersion,
 		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
 		Summary:           summary(er.Rc.Folha.ContraCheque),
-		Backups:           *s3Backups,
+		Backups:           []models.Backup{*s3Backups},
 		Meta: &models.Meta{
 			OpenFormat:       er.Rc.Metadados.FormatoAberto,
 			Access:           er.Rc.Metadados.Acesso.String(),
