@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
-	"strings"
 
 	"github.com/dadosjusbr/storage/repositories/database/postgres"
 	"github.com/dadosjusbr/storage/repositories/fileStorage"
@@ -139,24 +138,14 @@ func main() {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store Remunerations zip in Postgres: %v, error: %v", er.Pr.Remuneracoes, err)))
 	}
 
-	var parserRepository string
-	var parserVersion string
-	for _, v := range []string{"mpma", "mprr", "mpms", "mpsc", "mpam", "mpac", "mprs", "mpap", "mpro", "cnj"} {
-		if strings.Contains(er.Rc.Coleta.Orgao, v) {
-			parserRepository = fmt.Sprintf("https://github.com/dadosjusbr/parser-%s", er.Rc.Coleta.Orgao)
-			parserVersion = "unspecified"
-			break
-		}
-	}
-
 	agmi := models.AgencyMonthlyInfo{
 		AgencyID:          er.Rc.Coleta.Orgao,
 		Month:             int(er.Rc.Coleta.Mes),
 		Year:              int(er.Rc.Coleta.Ano),
 		CrawlerRepo:       er.Rc.Coleta.RepositorioColetor,
 		CrawlerVersion:    er.Rc.Coleta.VersaoColetor,
-		ParserRepo:        parserRepository,
-		ParserVersion:     parserVersion,
+		ParserRepo:        er.Rc.Coleta.RepositorioParser,
+		ParserVersion:     er.Rc.Coleta.VersaoParser,
 		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
 		Summary:           summary(er.Rc.Folha.ContraCheque),
 		Backups:           []models.Backup{*s3Backups},

@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/dadosjusbr/coletores v0.0.0-20210928113650-4c03e4fa3b74
-	github.com/dadosjusbr/proto v0.0.0-20221129132150-665052871cc7
+	github.com/dadosjusbr/proto v0.0.0-20221206173036-c38e1866da94
 	github.com/dadosjusbr/storage v0.0.0-20221204205725-c206668a26ea
 	github.com/kelseyhightower/envconfig v1.4.0
 	google.golang.org/protobuf v1.28.0
