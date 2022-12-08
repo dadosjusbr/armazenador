@@ -6,10 +6,15 @@ import (
 	"math"
 	"os"
 
+	"github.com/dadosjusbr/storage/repositories/database/postgres"
+	"github.com/dadosjusbr/storage/repositories/fileStorage"
+
 	"github.com/dadosjusbr/coletores/status"
 	"github.com/dadosjusbr/proto/coleta"
 	"github.com/dadosjusbr/proto/pipeline"
 	"github.com/dadosjusbr/storage"
+	"github.com/dadosjusbr/storage/models"
+	"github.com/dadosjusbr/storage/repositories/database/mongo"
 	"github.com/kelseyhightower/envconfig"
 	"google.golang.org/protobuf/encoding/prototext"
 )
@@ -21,6 +26,12 @@ type config struct {
 	MongoAgCol  string `envconfig:"MONGODB_AGCOL" required:"true"`
 	MongoPkgCol string `envconfig:"MONGODB_PKGCOL" required:"true"`
 	MongoRevCol string `envconfig:"MONGODB_REVCOL" required:"true"`
+
+	PostgresUser     string `envconfig:"POSTGRES_USER" required:"true"`
+	PostgresPassword string `envconfig:"POSTGRES_PASSWORD" required:"true"`
+	PostgresDBName   string `envconfig:"POSTGRES_DBNAME" required:"true"`
+	PostgresHost     string `envconfig:"POSTGRES_HOST" required:"true"`
+	PostgresPort     string `envconfig:"POSTGRES_PORT" required:"true"`
 
 	AWSRegion    string `envconfig:"AWS_REGION" required:"true"`
 	S3Bucket     string `envconfig:"S3_BUCKET" required:"true"`
@@ -44,17 +55,29 @@ func main() {
 	}
 
 	// Criando o client do MongoDB
-	mongoDb, err := storage.NewDBClient(c.MongoURI, c.DBName, c.MongoMICol, c.MongoAgCol, c.MongoPkgCol, c.MongoRevCol)
+	mongoDb, err := mongo.NewMongoDB(c.MongoURI, c.DBName, c.MongoMICol, c.MongoAgCol, c.MongoPkgCol, c.MongoRevCol)
 	if err != nil {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating MongoDB client: %v", err.Error())))
 	}
 	mongoDb.Collection(c.MongoMICol)
 
+	// Criando o client do Postgres
+	postgresDB, err := postgres.NewPostgresDB(c.PostgresUser, c.PostgresPassword, c.PostgresDBName, c.PostgresHost, c.PostgresPort)
+	if err != nil {
+		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating PostgresDB client: %v", err.Error())))
+	}
 	// Criando o client do S3
-	s3Client, err := storage.NewS3Client(c.AWSRegion, c.S3Bucket)
+	s3Client, err := fileStorage.NewS3Client(c.AWSRegion, c.S3Bucket)
 	if err != nil {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating S3 client: %v", err.Error())))
 	}
+
+	// Criando client do storage a partir do banco postgres e do client do s3
+	pgS3Client, err := storage.NewClient(postgresDB, s3Client)
+	if err != nil {
+		status.ExitFromError(status.NewError(3, fmt.Errorf("error setting up postgres storage client: %s", err)))
+	}
+	defer pgS3Client.Db.Disconnect()
 
 	// Criando o client do storage a partir do banco mongodb e do client do s3
 	mgoS3Client, err := storage.NewClient(mongoDb, s3Client)
@@ -77,8 +100,9 @@ func main() {
 		status.ExitFromError(status.NewError(status.InvalidInput, fmt.Errorf("there is no package to store. PackageResult:%+v", er.Pr)))
 	}
 
+	//Armazenando os datapackages no S3
 	dstKey := fmt.Sprintf("%s/datapackage/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
-	s3Backup, err := mgoS3Client.Cloud.UploadFile(er.Pr.Pacote, dstKey)
+	s3Backup, err := pgS3Client.Cloud.UploadFile(er.Pr.Pacote, dstKey)
 	if err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup package files from S3: %v, error: %v", er.Pr.Pacote, err)))
 	}
@@ -88,29 +112,44 @@ func main() {
 			status.ExitFromError(status.NewError(2, fmt.Errorf("no backup files found: CrawlingResult:%+v", er.Cr)))
 		}
 	*/
+	//Armazenando os backups no S3
 	dstKey = fmt.Sprintf("%s/backups/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
-	s3Backups, err := mgoS3Client.Cloud.UploadFile(er.Rc.Coleta.Arquivos[0], dstKey)
+	s3Backups, err := pgS3Client.Cloud.UploadFile(er.Rc.Coleta.Arquivos[0], dstKey)
 	if err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup files from S3: %v, error: %v", er.Rc.Coleta.Arquivos, err)))
 	}
 
+	//Armazenando as remuneracoes no S3 e no postgres
 	dstKey = fmt.Sprintf("%s/remuneracoes/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
 	_, err = mgoS3Client.Cloud.UploadFile(er.Pr.Remuneracoes.ZipUrl, dstKey)
 	if err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to upload Remunerations zip in S3: %v, error: %v", er.Pr.Remuneracoes, err)))
 	}
+	err = pgS3Client.StoreRemunerations(models.Remunerations{
+		AgencyID:     er.Rc.Coleta.Orgao,
+		Year:         int(er.Rc.Coleta.Ano),
+		Month:        int(er.Rc.Coleta.Mes),
+		NumBase:      int(er.Pr.Remuneracoes.NumBase),
+		NumOther:     int(er.Pr.Remuneracoes.NumOutras),
+		NumDiscounts: int(er.Pr.Remuneracoes.NumDescontos),
+		ZipUrl:       fmt.Sprintf("https://%s.s3.amazonaws.com/%s", c.S3Bucket, dstKey),
+	})
+	if err != nil {
+		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store Remunerations zip in Postgres: %v, error: %v", er.Pr.Remuneracoes, err)))
+	}
 
-	agmi := storage.AgencyMonthlyInfo{
+	agmi := models.AgencyMonthlyInfo{
 		AgencyID:          er.Rc.Coleta.Orgao,
 		Month:             int(er.Rc.Coleta.Mes),
 		Year:              int(er.Rc.Coleta.Ano),
 		CrawlerRepo:       er.Rc.Coleta.RepositorioColetor,
 		CrawlerVersion:    er.Rc.Coleta.VersaoColetor,
-		CrawlerID:         er.Rc.Coleta.RepositorioColetor,
+		ParserRepo:        er.Rc.Coleta.RepositorioParser,
+		ParserVersion:     er.Rc.Coleta.VersaoParser,
 		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
 		Summary:           summary(er.Rc.Folha.ContraCheque),
-		Backups:           []storage.Backup{*s3Backups},
-		Meta: &storage.Meta{
+		Backups:           []models.Backup{*s3Backups},
+		Meta: &models.Meta{
 			OpenFormat:       er.Rc.Metadados.FormatoAberto,
 			Access:           er.Rc.Metadados.Acesso.String(),
 			Extension:        er.Rc.Metadados.Extensao.String(),
@@ -123,7 +162,7 @@ func main() {
 			OtherRecipes:     er.Rc.Metadados.OutrasReceitas.String(),
 			Expenditure:      er.Rc.Metadados.Despesas.String(),
 		},
-		Score: &storage.Score{
+		Score: &models.Score{
 			Score:             float64(er.Rc.Metadados.IndiceTransparencia),
 			EasinessScore:     float64(er.Rc.Metadados.IndiceFacilidade),
 			CompletenessScore: float64(er.Rc.Metadados.IndiceCompletude),
@@ -137,12 +176,15 @@ func main() {
 	if err = mgoS3Client.Store(agmi); err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store agmi: %v", err)))
 	}
+	if err = pgS3Client.Store(agmi); err != nil {
+		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store 'coleta': %v", err)))
+	}
 	fmt.Println("Store Executed...")
 }
 
 // summary aux func to make all necessary calculations to DataSummary Struct
-func summary(employees []*coleta.ContraCheque) storage.Summary {
-	memberActive := storage.Summary{
+func summary(employees []*coleta.ContraCheque) models.Summary {
+	memberActive := models.Summary{
 		IncomeHistogram: map[int]int{10000: 0, 20000: 0, 30000: 0, 40000: 0, 50000: 0, -1: 0},
 	}
 	for _, emp := range employees {
@@ -153,14 +195,14 @@ func summary(employees []*coleta.ContraCheque) storage.Summary {
 		updateSummary(&memberActive, *emp)
 	}
 	if memberActive.Count == 0 {
-		return storage.Summary{}
+		return models.Summary{}
 	}
 	return memberActive
 }
 
 //updateSummary auxiliary function that updates the summary data at each employee value
-func updateSummary(s *storage.Summary, emp coleta.ContraCheque) {
-	updateData := func(d *storage.DataSummary, value float64, count int) {
+func updateSummary(s *models.Summary, emp coleta.ContraCheque) {
+	updateData := func(d *models.DataSummary, value float64, count int) {
 		if count == 1 {
 			d.Min = value
 			d.Max = value
