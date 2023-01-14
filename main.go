@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"time"
 
 	"github.com/dadosjusbr/storage/repositories/database/postgres"
 	"github.com/dadosjusbr/storage/repositories/fileStorage"
@@ -46,6 +47,8 @@ type config struct {
 	SwiftContainer string `envconfig:"SWIFT_CONTAINER" required:"true"`
 	// Backup conf
 	IgnoreBackups bool `envconfig:"IGNORE_BACKUPS" required:"false" default:"false"`
+	// Tempo inicial da coleta
+	StartTime string `envconfig:"START_TIME" required:"false"`
 }
 
 func main() {
@@ -80,11 +83,11 @@ func main() {
 	defer pgS3Client.Db.Disconnect()
 
 	// Criando o client do storage a partir do banco mongodb e do client do s3
-	mgoS3Client, err := storage.NewClient(mongoDb, s3Client)
-	if err != nil {
-		status.ExitFromError(status.NewError(3, fmt.Errorf("error setting up mongo storage client: %s", err)))
-	}
-	defer mgoS3Client.Db.Disconnect()
+	// mgoS3Client, err := storage.NewClient(mongoDb, s3Client)
+	// if err != nil {
+	// 	status.ExitFromError(status.NewError(3, fmt.Errorf("error setting up mongo storage client: %s", err)))
+	// }
+	// defer mgoS3Client.Db.Disconnect()
 
 	var er pipeline.ResultadoExecucao
 	erIN, err := ioutil.ReadAll(os.Stdin)
@@ -121,7 +124,7 @@ func main() {
 
 	//Armazenando as remuneracoes no S3 e no postgres
 	dstKey = fmt.Sprintf("%s/remuneracoes/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
-	_, err = mgoS3Client.Cloud.UploadFile(er.Pr.Remuneracoes.ZipUrl, dstKey)
+	_, err = pgS3Client.Cloud.UploadFile(er.Pr.Remuneracoes.ZipUrl, dstKey)
 	if err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to upload Remunerations zip in S3: %v, error: %v", er.Pr.Remuneracoes, err)))
 	}
@@ -170,12 +173,21 @@ func main() {
 		ProcInfo: er.Rc.Procinfo,
 		Package:  s3Backup,
 	}
+	// Calculando o tempo de execução da coleta
+	if c.StartTime != "" {
+		layout := "2006-01-02 15:04:05.000000"    // formato data-hora
+		t, err := time.Parse(layout, c.StartTime) // transformando a hora (string) para o tipo time.Time
+		if err == nil {
+			Duration := time.Since(t) // Calcula a diferença da hora dada com a hora atual (UTC+0)
+			agmi.Duration = time.Duration(Duration.Seconds())
+		}
+	}
 	if er.Rc.Procinfo != nil && er.Rc.Procinfo.Status != 0 {
 		agmi.ProcInfo = er.Rc.Procinfo
 	}
-	if err = mgoS3Client.Store(agmi); err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store agmi: %v", err)))
-	}
+	// if err = mgoS3Client.Store(agmi); err != nil {
+	// 	status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store agmi: %v", err)))
+	// }
 	if err = pgS3Client.Store(agmi); err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store 'coleta': %v", err)))
 	}
@@ -183,7 +195,7 @@ func main() {
 }
 
 // summary aux func to make all necessary calculations to DataSummary Struct
-func summary(employees []*coleta.ContraCheque) models.Summary {
+func summary(employees []*coleta.ContraCheque) *models.Summary {
 	memberActive := models.Summary{
 		IncomeHistogram: map[int]int{10000: 0, 20000: 0, 30000: 0, 40000: 0, 50000: 0, -1: 0},
 	}
@@ -195,9 +207,9 @@ func summary(employees []*coleta.ContraCheque) models.Summary {
 		updateSummary(&memberActive, *emp)
 	}
 	if memberActive.Count == 0 {
-		return models.Summary{}
+		return &models.Summary{}
 	}
-	return memberActive
+	return &memberActive
 }
 
 //updateSummary auxiliary function that updates the summary data at each employee value
