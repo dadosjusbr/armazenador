@@ -14,19 +14,11 @@ import (
 	"github.com/dadosjusbr/proto/pipeline"
 	"github.com/dadosjusbr/storage"
 	"github.com/dadosjusbr/storage/models"
-	"github.com/dadosjusbr/storage/repositories/database/mongo"
 	"github.com/kelseyhightower/envconfig"
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
 type config struct {
-	MongoURI    string `envconfig:"MONGODB_URI" required:"true"`
-	DBName      string `envconfig:"MONGODB_DBNAME" required:"true"`
-	MongoMICol  string `envconfig:"MONGODB_MICOL" required:"true"`
-	MongoAgCol  string `envconfig:"MONGODB_AGCOL" required:"true"`
-	MongoPkgCol string `envconfig:"MONGODB_PKGCOL" required:"true"`
-	MongoRevCol string `envconfig:"MONGODB_REVCOL" required:"true"`
-
 	PostgresUser     string `envconfig:"POSTGRES_USER" required:"true"`
 	PostgresPassword string `envconfig:"POSTGRES_PASSWORD" required:"true"`
 	PostgresDBName   string `envconfig:"POSTGRES_DBNAME" required:"true"`
@@ -38,12 +30,6 @@ type config struct {
 	AWSAccessKey string `envconfig:"AWS_ACCESS_KEY_ID" required:"true"`
 	AWSSecretKey string `envconfig:"AWS_SECRET_ACCESS_KEY" required:"true"`
 
-	// Swift Conf
-	SwiftUsername  string `envconfig:"SWIFT_USERNAME" required:"true"`
-	SwiftAPIKey    string `envconfig:"SWIFT_APIKEY" required:"true"`
-	SwiftAuthURL   string `envconfig:"SWIFT_AUTHURL" required:"true"`
-	SwiftDomain    string `envconfig:"SWIFT_DOMAIN" required:"true"`
-	SwiftContainer string `envconfig:"SWIFT_CONTAINER" required:"true"`
 	// Backup conf
 	IgnoreBackups bool `envconfig:"IGNORE_BACKUPS" required:"false" default:"false"`
 }
@@ -53,13 +39,6 @@ func main() {
 	if err := envconfig.Process("", &c); err != nil {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error loading config values from .env: %v", err.Error())))
 	}
-
-	// Criando o client do MongoDB
-	mongoDb, err := mongo.NewMongoDB(c.MongoURI, c.DBName, c.MongoMICol, c.MongoAgCol, c.MongoPkgCol, c.MongoRevCol)
-	if err != nil {
-		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating MongoDB client: %v", err.Error())))
-	}
-	mongoDb.Collection(c.MongoMICol)
 
 	// Criando o client do Postgres
 	postgresDB, err := postgres.NewPostgresDB(c.PostgresUser, c.PostgresPassword, c.PostgresDBName, c.PostgresHost, c.PostgresPort)
@@ -78,13 +57,6 @@ func main() {
 		status.ExitFromError(status.NewError(3, fmt.Errorf("error setting up postgres storage client: %s", err)))
 	}
 	defer pgS3Client.Db.Disconnect()
-
-	// Criando o client do storage a partir do banco mongodb e do client do s3
-	mgoS3Client, err := storage.NewClient(mongoDb, s3Client)
-	if err != nil {
-		status.ExitFromError(status.NewError(3, fmt.Errorf("error setting up mongo storage client: %s", err)))
-	}
-	defer mgoS3Client.Db.Disconnect()
 
 	var er pipeline.ResultadoExecucao
 	erIN, err := ioutil.ReadAll(os.Stdin)
@@ -121,7 +93,7 @@ func main() {
 
 	//Armazenando as remuneracoes no S3 e no postgres
 	dstKey = fmt.Sprintf("%s/remuneracoes/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
-	_, err = mgoS3Client.Cloud.UploadFile(er.Pr.Remuneracoes.ZipUrl, dstKey)
+	_, err = pgS3Client.Cloud.UploadFile(er.Pr.Remuneracoes.ZipUrl, dstKey)
 	if err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to upload Remunerations zip in S3: %v, error: %v", er.Pr.Remuneracoes, err)))
 	}
@@ -173,9 +145,6 @@ func main() {
 	if er.Rc.Procinfo != nil && er.Rc.Procinfo.Status != 0 {
 		agmi.ProcInfo = er.Rc.Procinfo
 	}
-	if err = mgoS3Client.Store(agmi); err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store agmi: %v", err)))
-	}
 	if err = pgS3Client.Store(agmi); err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store 'coleta': %v", err)))
 	}
@@ -200,7 +169,7 @@ func summary(employees []*coleta.ContraCheque) models.Summary {
 	return memberActive
 }
 
-//updateSummary auxiliary function that updates the summary data at each employee value
+// updateSummary auxiliary function that updates the summary data at each employee value
 func updateSummary(s *models.Summary, emp coleta.ContraCheque) {
 	updateData := func(d *models.DataSummary, value float64, count int) {
 		if count == 1 {
