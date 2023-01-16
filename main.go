@@ -149,10 +149,11 @@ func main() {
 	if c.StartTime != "" {
 		layout := "2006-01-02 15:04:05.000000"    // formato data-hora
 		t, err := time.Parse(layout, c.StartTime) // transformando a hora (string) para o tipo time.Time
-		if err == nil {
-			Duration := time.Since(t) // Calcula a diferença da hora dada com a hora atual (UTC+0)
-			agmi.Duration = time.Duration(Duration.Seconds())
+		if err != nil {
+			status.ExitFromError(status.NewError(2, fmt.Errorf("error calculating collection time: %v", err)))
 		}
+		Duration := time.Since(t) // Calcula a diferença da hora dada com a hora atual (UTC+0)
+		agmi.Duration = time.Duration(Duration.Seconds())
 	}
 	if er.Rc.Procinfo != nil && er.Rc.Procinfo.Status != 0 {
 		agmi.ProcInfo = er.Rc.Procinfo
