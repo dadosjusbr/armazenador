@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"time"
 
 	"github.com/dadosjusbr/storage/repositories/database/postgres"
 	"github.com/dadosjusbr/storage/repositories/fileStorage"
@@ -32,6 +33,8 @@ type config struct {
 
 	// Backup conf
 	IgnoreBackups bool `envconfig:"IGNORE_BACKUPS" required:"false" default:"false"`
+	// Tempo inicial da coleta
+	StartTime string `envconfig:"START_TIME" required:"false"`
 }
 
 func main() {
@@ -142,9 +145,20 @@ func main() {
 		ProcInfo: er.Rc.Procinfo,
 		Package:  s3Backup,
 	}
+	// Calculando o tempo de execução da coleta
+	if c.StartTime != "" {
+		layout := "2006-01-02 15:04:05.000000"    // formato data-hora
+		t, err := time.Parse(layout, c.StartTime) // transformando a hora (string) para o tipo time.Time
+		if err != nil {
+			status.ExitFromError(status.NewError(2, fmt.Errorf("error calculating collection time: %v", err)))
+		}
+		Duration := time.Since(t) // Calcula a diferença da hora dada com a hora atual (UTC+0)
+		agmi.Duration = time.Duration(Duration.Seconds())
+	}
 	if er.Rc.Procinfo != nil && er.Rc.Procinfo.Status != 0 {
 		agmi.ProcInfo = er.Rc.Procinfo
 	}
+
 	if err = pgS3Client.Store(agmi); err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store 'coleta': %v", err)))
 	}
@@ -152,7 +166,7 @@ func main() {
 }
 
 // summary aux func to make all necessary calculations to DataSummary Struct
-func summary(employees []*coleta.ContraCheque) models.Summary {
+func summary(employees []*coleta.ContraCheque) *models.Summary {
 	memberActive := models.Summary{
 		IncomeHistogram: map[int]int{10000: 0, 20000: 0, 30000: 0, 40000: 0, 50000: 0, -1: 0},
 	}
@@ -164,9 +178,9 @@ func summary(employees []*coleta.ContraCheque) models.Summary {
 		updateSummary(&memberActive, *emp)
 	}
 	if memberActive.Count == 0 {
-		return models.Summary{}
+		return &models.Summary{}
 	}
-	return memberActive
+	return &memberActive
 }
 
 // updateSummary auxiliary function that updates the summary data at each employee value
