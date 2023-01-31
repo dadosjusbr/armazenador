@@ -7,14 +7,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/dadosjusbr/storage/repositories/database/postgres"
-	"github.com/dadosjusbr/storage/repositories/fileStorage"
-
 	"github.com/dadosjusbr/coletores/status"
 	"github.com/dadosjusbr/proto/coleta"
 	"github.com/dadosjusbr/proto/pipeline"
 	"github.com/dadosjusbr/storage"
 	"github.com/dadosjusbr/storage/models"
+	"github.com/dadosjusbr/storage/repo/database"
+	"github.com/dadosjusbr/storage/repo/file_storage"
 	"github.com/kelseyhightower/envconfig"
 	"google.golang.org/protobuf/encoding/prototext"
 )
@@ -44,12 +43,12 @@ func main() {
 	}
 
 	// Criando o client do Postgres
-	postgresDB, err := postgres.NewPostgresDB(c.PostgresUser, c.PostgresPassword, c.PostgresDBName, c.PostgresHost, c.PostgresPort)
+	postgresDB, err := database.NewPostgresDB(c.PostgresUser, c.PostgresPassword, c.PostgresDBName, c.PostgresHost, c.PostgresPort)
 	if err != nil {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating PostgresDB client: %v", err.Error())))
 	}
 	// Criando o client do S3
-	s3Client, err := fileStorage.NewS3Client(c.AWSRegion, c.S3Bucket)
+	s3Client, err := file_storage.NewS3Client(c.AWSRegion, c.S3Bucket)
 	if err != nil {
 		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating S3 client: %v", err.Error())))
 	}
@@ -153,7 +152,7 @@ func main() {
 			status.ExitFromError(status.NewError(2, fmt.Errorf("error calculating collection time: %v", err)))
 		}
 		Duration := time.Since(t) // Calcula a diferença da hora dada com a hora atual (UTC+0)
-		agmi.Duration = time.Duration(Duration.Seconds())
+		agmi.Duration = Duration.Seconds()
 	}
 	if er.Rc.Procinfo != nil && er.Rc.Procinfo.Status != 0 {
 		agmi.ProcInfo = er.Rc.Procinfo
