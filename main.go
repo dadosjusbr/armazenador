@@ -7,9 +7,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/dadosjusbr/coletores/status"
 	"github.com/dadosjusbr/proto/coleta"
 	"github.com/dadosjusbr/proto/pipeline"
+	"github.com/dadosjusbr/status"
 	"github.com/dadosjusbr/storage"
 	"github.com/dadosjusbr/storage/models"
 	"github.com/dadosjusbr/storage/repo/database"
@@ -189,8 +189,14 @@ func updateSummary(s *models.Summary, emp coleta.ContraCheque) {
 			d.Min = value
 			d.Max = value
 		} else {
-			d.Min = math.Min(d.Min, value)
-			d.Max = math.Max(d.Max, value)
+			// in the case of discounts, whose values ​​are negative
+			if value < 0 {
+				d.Min = math.Max(d.Min, value)
+				d.Max = math.Min(d.Max, value)
+			} else {
+				d.Min = math.Min(d.Min, value)
+				d.Max = math.Max(d.Max, value)
+			}
 		}
 		d.Total += value
 		d.Average = d.Total / float64(count)
@@ -198,7 +204,7 @@ func updateSummary(s *models.Summary, emp coleta.ContraCheque) {
 
 	// Income histogram.
 	s.Count++
-	salaryBase, benefits := calcBaseSalary(emp)
+	salaryBase, benefits, discounts := calcBaseSalary(emp)
 	var salaryRange int
 	if salaryBase <= 10000 {
 		salaryRange = 10000
@@ -217,17 +223,21 @@ func updateSummary(s *models.Summary, emp coleta.ContraCheque) {
 
 	updateData(&s.BaseRemuneration, salaryBase, s.Count)
 	updateData(&s.OtherRemunerations, benefits, s.Count)
+	updateData(&s.Discounts, discounts, s.Count)
 }
 
-func calcBaseSalary(emp coleta.ContraCheque) (float64, float64) {
+func calcBaseSalary(emp coleta.ContraCheque) (float64, float64, float64) {
 	var salaryBase float64
 	var benefits float64
+	var discounts float64
 	for _, v := range emp.Remuneracoes.Remuneracao {
 		if v.TipoReceita == coleta.Remuneracao_B && v.Natureza == coleta.Remuneracao_R {
 			salaryBase += v.Valor
 		} else if v.TipoReceita == coleta.Remuneracao_O && v.Natureza == coleta.Remuneracao_R {
 			benefits += v.Valor
+		} else if v.Natureza == coleta.Remuneracao_D {
+			discounts += v.Valor
 		}
 	}
-	return salaryBase, benefits
+	return salaryBase, benefits, discounts
 }
