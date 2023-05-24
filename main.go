@@ -185,18 +185,13 @@ func summary(employees []*coleta.ContraCheque) *models.Summary {
 // updateSummary auxiliary function that updates the summary data at each employee value
 func updateSummary(s *models.Summary, emp coleta.ContraCheque) {
 	updateData := func(d *models.DataSummary, value float64, count int) {
+		value = math.Abs(value)
 		if count == 1 {
 			d.Min = value
 			d.Max = value
 		} else {
-			// in the case of discounts, whose values ​​are negative
-			if value < 0 {
-				d.Min = math.Max(d.Min, value)
-				d.Max = math.Min(d.Max, value)
-			} else {
-				d.Min = math.Min(d.Min, value)
-				d.Max = math.Max(d.Max, value)
-			}
+			d.Min = math.Min(d.Min, value)
+			d.Max = math.Max(d.Max, value)
 		}
 		d.Total += value
 		d.Average = d.Total / float64(count)
