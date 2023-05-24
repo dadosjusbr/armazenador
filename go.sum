@@ -28,12 +28,16 @@ github.com/dadosjusbr/coletores v0.0.0-20210928113650-4c03e4fa3b74 h1:biTIncJC0X
 github.com/dadosjusbr/coletores v0.0.0-20210928113650-4c03e4fa3b74/go.mod h1:m9opDykSJIwaf+veICpleWMranaaWEbx5RNQhKZAgXU=
 github.com/dadosjusbr/proto v0.0.0-20221212025627-91c60aa3cd12 h1:ufl8nbCEo6g2VHUbedGy0gYk9Sgrynf9rcnzuSw4TEg=
 github.com/dadosjusbr/proto v0.0.0-20221212025627-91c60aa3cd12/go.mod h1:gPA7VxjEmyez/xtln4qBj+tM1NO0/zcw3ryjxTRNSco=
+github.com/dadosjusbr/status v0.0.0-20230428151814-b605fe0e598f h1:MHtPcEeoJ4CCOvFDzvYXU2AndoqiIvZdrOjWACaImLA=
+github.com/dadosjusbr/status v0.0.0-20230428151814-b605fe0e598f/go.mod h1:7M8ds2L3u+rHuiP+IImNTx7bSlIUz6hXzW0ZTBOeHzw=
 github.com/dadosjusbr/storage v0.0.0-20221213123015-636ba7847687 h1:flCzP1pfQ2UMbD+Jn5iV3tEwlJMSiDbbgyGomoIt7bQ=
 github.com/dadosjusbr/storage v0.0.0-20221213123015-636ba7847687/go.mod h1:X7NgRt/qEqFJFsL2ZS5Mrtx3UhsZg6DG3b692ySEStU=
 github.com/dadosjusbr/storage v0.0.0-20230114143747-3224898240b5 h1:Dyz60fOBitpLuld7wI0n0ygv6QIv7TQXQEFaMHEIKl0=
 github.com/dadosjusbr/storage v0.0.0-20230114143747-3224898240b5/go.mod h1:4if792wTksntxVCBRjNJ7v4N27rWtsEh8MGJNNGYSwg=
 github.com/dadosjusbr/storage v0.0.0-20230131000353-c4889a1c7061 h1:qSmqb7IKejKVWNkEST1RtlYFVktlTbppVQeWB3JtZYg=
 github.com/dadosjusbr/storage v0.0.0-20230131000353-c4889a1c7061/go.mod h1:ttc45wBL5bjz5uU24mgNNPV9ZHaJ3SmoRwVOmyVRZyY=
+github.com/dadosjusbr/storage v0.0.0-20230523220318-d5284dae2dff h1:M7iFn/rNUd0vCkH4PWySePAGyq7CQew0dW7V3vOGdMg=
+github.com/dadosjusbr/storage v0.0.0-20230523220318-d5284dae2dff/go.mod h1:ttc45wBL5bjz5uU24mgNNPV9ZHaJ3SmoRwVOmyVRZyY=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
