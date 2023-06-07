@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/dadosjusbr/proto v0.0.0-20221212025627-91c60aa3cd12
-	github.com/dadosjusbr/storage v0.0.0-20230523220318-d5284dae2dff
+	github.com/dadosjusbr/storage v0.0.0-20230607191025-e3cbdf827955
 	github.com/kelseyhightower/envconfig v1.4.0
 	google.golang.org/protobuf v1.28.1
 )
