@@ -199,29 +199,30 @@ func updateSummary(s *models.Summary, emp coleta.ContraCheque) {
 
 	// Income histogram.
 	s.Count++
-	salaryBase, benefits, discounts := calcBaseSalary(emp)
-	var salaryRange int
-	if salaryBase <= 10000 {
-		salaryRange = 10000
-	} else if salaryBase <= 20000 {
-		salaryRange = 20000
-	} else if salaryBase <= 30000 {
-		salaryRange = 30000
-	} else if salaryBase <= 40000 {
-		salaryRange = 40000
-	} else if salaryBase <= 50000 {
-		salaryRange = 50000
+	salaryBase, benefits, discounts, remuneration := calcBaseSalary(emp)
+	var remunerationRange int
+	if remuneration <= 10000 {
+		remunerationRange = 10000
+	} else if remuneration <= 20000 {
+		remunerationRange = 20000
+	} else if remuneration <= 30000 {
+		remunerationRange = 30000
+	} else if remuneration <= 40000 {
+		remunerationRange = 40000
+	} else if remuneration <= 50000 {
+		remunerationRange = 50000
 	} else {
-		salaryRange = -1 // -1 is maker when the salary is over 50000
+		remunerationRange = -1 // -1 is maker when the salary is over 50000
 	}
-	s.IncomeHistogram[salaryRange]++
+	s.IncomeHistogram[remunerationRange]++
 
 	updateData(&s.BaseRemuneration, salaryBase, s.Count)
 	updateData(&s.OtherRemunerations, benefits, s.Count)
 	updateData(&s.Discounts, discounts, s.Count)
+	updateData(&s.Remunerations, remuneration, s.Count)
 }
 
-func calcBaseSalary(emp coleta.ContraCheque) (float64, float64, float64) {
+func calcBaseSalary(emp coleta.ContraCheque) (float64, float64, float64, float64) {
 	var salaryBase float64
 	var benefits float64
 	var discounts float64
@@ -234,5 +235,6 @@ func calcBaseSalary(emp coleta.ContraCheque) (float64, float64, float64) {
 			discounts += v.Valor
 		}
 	}
-	return salaryBase, benefits, discounts
+	remuneration := salaryBase + benefits - math.Abs(discounts)
+	return salaryBase, benefits, discounts, remuneration
 }
