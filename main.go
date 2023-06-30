@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"regexp"
 	"time"
 
 	"github.com/dadosjusbr/proto/coleta"
@@ -161,6 +162,58 @@ func main() {
 	if err = pgS3Client.Store(agmi); err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store 'coleta': %v", err)))
 	}
+
+	var paychecks []models.Paycheck
+	var remunerations []models.Remuneration
+	m, _ := regexp.Compile("[A-Za-z]")
+
+	for id, p := range er.Rc.Folha.ContraCheque {
+		salary, benefits, discounts, remuneration := calcBaseSalary(*p)
+		paychecks = append(paychecks, models.Paycheck{
+			ID:           id + 1,
+			Agency:       er.Rc.Coleta.Orgao,
+			Month:        int(er.Rc.Coleta.Mes),
+			Year:         int(er.Rc.Coleta.Ano),
+			CollectKey:   er.Rc.Coleta.ChaveColeta,
+			Name:         p.Nome,
+			Registration: p.Matricula,
+			JobFunction:  p.Funcao,
+			Workplace:    p.LocalTrabalho,
+			Salary:       salary,
+			Benefits:     benefits,
+			Discounts:    math.Abs(discounts),
+			Remuneration: remuneration,
+		})
+		i := 1
+		for _, r := range p.Remuneracoes.Remuneracao {
+			if r.Valor != 0 {
+				remunerations = append(remunerations, models.Remuneration{
+					ID:         i,
+					PaycheckID: id + 1,
+					Agency:     er.Rc.Coleta.Orgao,
+					Month:      int(er.Rc.Coleta.Mes),
+					Year:       int(er.Rc.Coleta.Ano),
+					Nature:     r.Natureza.String(),
+					IncomeType: r.TipoReceita.String(),
+					Category:   r.Categoria,
+					Item:       r.Item,
+					Value:      math.Abs(r.Valor),
+				})
+				if r.Natureza == coleta.Remuneracao_D {
+					remunerations[len(remunerations)-1].IncomeType = ""
+				}
+				// rubrica inconsistente
+				if !m.MatchString(r.Item) {
+					remunerations[len(remunerations)-1].Inconsistent = true
+				}
+				i++
+			}
+		}
+	}
+	if err := pgS3Client.StorePaychecks(paychecks, remunerations); err != nil {
+		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store 'contracheques' and 'remuneracoes': %v", err)))
+	}
+
 	fmt.Println("Store Executed...")
 }
 
