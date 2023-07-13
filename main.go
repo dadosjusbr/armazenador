@@ -164,9 +164,10 @@ func main() {
 	}
 
 	var paychecks []models.Paycheck
-	var remunerations []models.Remuneration
+	var remunerations []models.PaycheckItem
 	m, _ := regexp.Compile("[A-Za-z]")
 
+	// Contracheques
 	for id, p := range er.Rc.Folha.ContraCheque {
 		salary, benefits, discounts, remuneration := calcBaseSalary(*p)
 		paychecks = append(paychecks, models.Paycheck{
@@ -176,31 +177,32 @@ func main() {
 			Year:         int(er.Rc.Coleta.Ano),
 			CollectKey:   er.Rc.Coleta.ChaveColeta,
 			Name:         p.Nome,
-			Registration: p.Matricula,
-			JobFunction:  p.Funcao,
+			RegisterID:   p.Matricula,
+			Role:         p.Funcao,
 			Workplace:    p.LocalTrabalho,
 			Salary:       salary,
 			Benefits:     benefits,
 			Discounts:    math.Abs(discounts),
 			Remuneration: remuneration,
 		})
+		// Detalhamento das despesas
 		i := 1
 		for _, r := range p.Remuneracoes.Remuneracao {
 			if r.Valor != 0 {
-				remunerations = append(remunerations, models.Remuneration{
+				remunerations = append(remunerations, models.PaycheckItem{
 					ID:         i,
 					PaycheckID: id + 1,
 					Agency:     er.Rc.Coleta.Orgao,
 					Month:      int(er.Rc.Coleta.Mes),
 					Year:       int(er.Rc.Coleta.Ano),
-					Nature:     r.Natureza.String(),
-					IncomeType: r.TipoReceita.String(),
 					Category:   r.Categoria,
 					Item:       r.Item,
 					Value:      math.Abs(r.Valor),
 				})
 				if r.Natureza == coleta.Remuneracao_D {
-					remunerations[len(remunerations)-1].IncomeType = ""
+					remunerations[len(remunerations)-1].Type = "D"
+				} else {
+					remunerations[len(remunerations)-1].Type = r.Natureza.String() + "/" + r.TipoReceita.String()
 				}
 				// rubrica inconsistente
 				if !m.MatchString(r.Item) {
