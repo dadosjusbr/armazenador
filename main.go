@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/dadosjusbr/proto/coleta"
@@ -184,6 +185,7 @@ func main() {
 			Benefits:     benefits,
 			Discounts:    math.Abs(discounts),
 			Remuneration: remuneration,
+			Situation:    ativoInativo(p.Ativo, er.Rc.Coleta.Orgao),
 		})
 		// Detalhamento das despesas
 		i := 1
@@ -292,4 +294,14 @@ func calcBaseSalary(emp coleta.ContraCheque) (float64, float64, float64, float64
 	}
 	remuneration := salaryBase + benefits - math.Abs(discounts)
 	return salaryBase, benefits, discounts, remuneration
+}
+
+func ativoInativo(ativo bool, orgao string) *string {
+	// Atualmente conseguimos distinguir membros ativos apenas nos MPs
+	if ativo && strings.Contains(orgao, "mp") {
+		s := "A"
+		return &s
+	} else {
+		return nil
+	}
 }
