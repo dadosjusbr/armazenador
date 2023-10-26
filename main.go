@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/dadosjusbr/proto/coleta"
 	"github.com/dadosjusbr/proto/pipeline"
@@ -17,6 +18,9 @@ import (
 	"github.com/dadosjusbr/storage/repo/database"
 	"github.com/dadosjusbr/storage/repo/file_storage"
 	"github.com/kelseyhightower/envconfig"
+	"golang.org/x/text/runes"
+	"golang.org/x/text/transform"
+	"golang.org/x/text/unicode/norm"
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
@@ -209,6 +213,10 @@ func main() {
 				// rubrica inconsistente
 				if !m.MatchString(r.Item) {
 					remunerations[len(remunerations)-1].Inconsistent = true
+				} else {
+					// Se a rubrica não for inconsistente, faremos uma cópia sanitizada na coluna item_sanitizado.
+					itemSanitizado := sanitizarItem(r.Item)
+					remunerations[len(remunerations)-1].SanitizedItem = &itemSanitizado
 				}
 				i++
 			}
@@ -304,4 +312,32 @@ func ativoInativo(ativo bool, orgao string) *string {
 	} else {
 		return nil
 	}
+}
+
+// Sanitizando as rubricas:
+// deixando-as em minúsculo, sem acentos, pontuações, caracteres especiais e espaços duplos
+func sanitizarItem(item string) string {
+	// Converte para minúsculas
+	item = strings.ToLower(item)
+
+	// Remove acentos
+	t := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
+	item, _, _ = transform.String(t, item)
+
+	// Remove pontuação
+	item = strings.Map(func(r rune) rune {
+		if strings.ContainsRune(".,;:!?-", r) {
+			return -1
+		}
+		return r
+	}, item)
+
+	// Remove caracteres especiais
+	re := regexp.MustCompile("[^a-zA-Z0-9 ]")
+	item = re.ReplaceAllString(item, "")
+
+	// Remove espaços duplos e espaços no início/final da string
+	item = strings.Join(strings.Fields(item), " ")
+
+	return item
 }
