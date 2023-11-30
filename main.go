@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net/http"
 	"os"
 	"regexp"
 	"strings"
@@ -18,6 +20,7 @@ import (
 	"github.com/dadosjusbr/storage/repo/database"
 	"github.com/dadosjusbr/storage/repo/file_storage"
 	"github.com/kelseyhightower/envconfig"
+	"golang.org/x/exp/slices"
 	"golang.org/x/text/runes"
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
@@ -118,59 +121,12 @@ func main() {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store Remunerations zip in Postgres: %v, error: %v", er.Pr.Remuneracoes, err)))
 	}
 
-	agmi := models.AgencyMonthlyInfo{
-		AgencyID:          er.Rc.Coleta.Orgao,
-		Month:             int(er.Rc.Coleta.Mes),
-		Year:              int(er.Rc.Coleta.Ano),
-		CrawlerRepo:       er.Rc.Coleta.RepositorioColetor,
-		CrawlerVersion:    er.Rc.Coleta.VersaoColetor,
-		ParserRepo:        er.Rc.Coleta.RepositorioParser,
-		ParserVersion:     er.Rc.Coleta.VersaoParser,
-		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
-		Summary:           summary(er.Rc.Folha.ContraCheque),
-		Backups:           []models.Backup{*s3Backups},
-		Meta: &models.Meta{
-			OpenFormat:       er.Rc.Metadados.FormatoAberto,
-			Access:           er.Rc.Metadados.Acesso.String(),
-			Extension:        er.Rc.Metadados.Extensao.String(),
-			StrictlyTabular:  er.Rc.Metadados.EstritamenteTabular,
-			ConsistentFormat: er.Rc.Metadados.FormatoConsistente,
-			HaveEnrollment:   er.Rc.Metadados.TemMatricula,
-			ThereIsACapacity: er.Rc.Metadados.TemLotacao,
-			HasPosition:      er.Rc.Metadados.TemCargo,
-			BaseRevenue:      er.Rc.Metadados.ReceitaBase.String(),
-			OtherRecipes:     er.Rc.Metadados.OutrasReceitas.String(),
-			Expenditure:      er.Rc.Metadados.Despesas.String(),
-		},
-		Score: &models.Score{
-			Score:             float64(er.Rc.Metadados.IndiceTransparencia),
-			EasinessScore:     float64(er.Rc.Metadados.IndiceFacilidade),
-			CompletenessScore: float64(er.Rc.Metadados.IndiceCompletude),
-		},
-		ProcInfo: er.Rc.Procinfo,
-		Package:  s3Backup,
-	}
-	// Calculando o tempo de execução da coleta
-	if c.StartTime != "" {
-		layout := "2006-01-02 15:04:05.000000"    // formato data-hora
-		t, err := time.Parse(layout, c.StartTime) // transformando a hora (string) para o tipo time.Time
-		if err != nil {
-			status.ExitFromError(status.NewError(2, fmt.Errorf("error calculating collection time: %v", err)))
-		}
-		Duration := time.Since(t) // Calcula a diferença da hora dada com a hora atual (UTC+0)
-		agmi.Duration = Duration.Seconds()
-	}
-	if er.Rc.Procinfo != nil && er.Rc.Procinfo.Status != 0 {
-		agmi.ProcInfo = er.Rc.Procinfo
-	}
-
-	if err = pgS3Client.Store(agmi); err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store 'coleta': %v", err)))
-	}
-
 	var paychecks []models.Paycheck
 	var remunerations []models.PaycheckItem
 	m, _ := regexp.Compile("[A-Za-z]")
+
+	// Mapeando as rubricas distintas da folha de contracheque
+	valor_por_rubrica := make(map[string]float64)
 
 	// Contracheques
 	for id, p := range er.Rc.Folha.ContraCheque {
@@ -216,12 +172,70 @@ func main() {
 				} else {
 					// Se a rubrica não for inconsistente, faremos uma cópia sanitizada na coluna item_sanitizado.
 					itemSanitizado := sanitizarItem(r.Item)
+					// agregamos o valor por rubrica (não considerando descontos)
+					if r.Natureza != coleta.Remuneracao_D {
+						valor_por_rubrica[itemSanitizado] += math.Abs(r.Valor)
+					}
 					remunerations[len(remunerations)-1].SanitizedItem = &itemSanitizado
 				}
 				i++
 			}
 		}
 	}
+
+	itemSummary := agregandoRubricas(valor_por_rubrica)
+
+	agmi := models.AgencyMonthlyInfo{
+		AgencyID:          er.Rc.Coleta.Orgao,
+		Month:             int(er.Rc.Coleta.Mes),
+		Year:              int(er.Rc.Coleta.Ano),
+		CrawlerRepo:       er.Rc.Coleta.RepositorioColetor,
+		CrawlerVersion:    er.Rc.Coleta.VersaoColetor,
+		ParserRepo:        er.Rc.Coleta.RepositorioParser,
+		ParserVersion:     er.Rc.Coleta.VersaoParser,
+		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
+		Summary:           summary(er.Rc.Folha.ContraCheque),
+		Backups:           []models.Backup{*s3Backups},
+		Meta: &models.Meta{
+			OpenFormat:       er.Rc.Metadados.FormatoAberto,
+			Access:           er.Rc.Metadados.Acesso.String(),
+			Extension:        er.Rc.Metadados.Extensao.String(),
+			StrictlyTabular:  er.Rc.Metadados.EstritamenteTabular,
+			ConsistentFormat: er.Rc.Metadados.FormatoConsistente,
+			HaveEnrollment:   er.Rc.Metadados.TemMatricula,
+			ThereIsACapacity: er.Rc.Metadados.TemLotacao,
+			HasPosition:      er.Rc.Metadados.TemCargo,
+			BaseRevenue:      er.Rc.Metadados.ReceitaBase.String(),
+			OtherRecipes:     er.Rc.Metadados.OutrasReceitas.String(),
+			Expenditure:      er.Rc.Metadados.Despesas.String(),
+		},
+		Score: &models.Score{
+			Score:             float64(er.Rc.Metadados.IndiceTransparencia),
+			EasinessScore:     float64(er.Rc.Metadados.IndiceFacilidade),
+			CompletenessScore: float64(er.Rc.Metadados.IndiceCompletude),
+		},
+		ProcInfo:    er.Rc.Procinfo,
+		Package:     s3Backup,
+		ItemSummary: &itemSummary,
+	}
+	// Calculando o tempo de execução da coleta
+	if c.StartTime != "" {
+		layout := "2006-01-02 15:04:05.000000"    // formato data-hora
+		t, err := time.Parse(layout, c.StartTime) // transformando a hora (string) para o tipo time.Time
+		if err != nil {
+			status.ExitFromError(status.NewError(2, fmt.Errorf("error calculating collection time: %v", err)))
+		}
+		Duration := time.Since(t) // Calcula a diferença da hora dada com a hora atual (UTC+0)
+		agmi.Duration = Duration.Seconds()
+	}
+	if er.Rc.Procinfo != nil && er.Rc.Procinfo.Status != 0 {
+		agmi.ProcInfo = er.Rc.Procinfo
+	}
+
+	if err = pgS3Client.Store(agmi); err != nil {
+		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store 'coleta': %v", err)))
+	}
+
 	if err := pgS3Client.StorePaychecks(paychecks, remunerations); err != nil {
 		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store 'contracheques' and 'remuneracoes': %v", err)))
 	}
@@ -340,4 +354,52 @@ func sanitizarItem(item string) string {
 	item = strings.Join(strings.Fields(item), " ")
 
 	return item
+}
+
+// Realiza o download do json com as rubricas desambiguadas
+func listarRubricas() map[string][]string {
+	// json com rubricas desambiguadas
+	url := "https://raw.githubusercontent.com/dadosjusbr/desambiguador/main/rubricas.json"
+
+	res, err := http.Get(url)
+	if err != nil {
+		status.ExitFromError(status.NewError(status.ConnectionError, err))
+	}
+
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		status.ExitFromError(status.NewError(status.SystemError, err))
+	}
+
+	var rubricas map[string][]string
+
+	// unmarshall
+	json.Unmarshal(body, &rubricas)
+
+	return rubricas
+}
+
+// Com a lista de rubricas distintas da folha de contracheque (e seu somatório),
+// comparamos com a lista de rubricas desambiguadas e criamos o json da coluna 'resumo'
+// alocando o valor de cada rubrica a seu respectivo grupo.
+func agregandoRubricas(valor_por_rubrica map[string]float64) models.ItemSummary {
+	rubricas := listarRubricas()
+	var itemSummary models.ItemSummary
+	var others float64
+
+	for rubrica, valor := range valor_por_rubrica {
+		for chave, listaRubricas := range rubricas {
+			others = valor
+			if slices.Contains(listaRubricas, rubrica) {
+				switch chave {
+				case "auxilio-alimentacao":
+					itemSummary.FoodAllowance += valor
+					others = 0
+				}
+				break
+			}
+		}
+		itemSummary.Others += others
+	}
+	return itemSummary
 }
