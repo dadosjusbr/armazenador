@@ -1,10 +1,10 @@
 module armazenador
 
-go 1.17
+go 1.18
 
 require (
 	github.com/dadosjusbr/proto v0.0.0-20221212025627-91c60aa3cd12
-	github.com/dadosjusbr/storage v0.0.0-20231026210858-4a308036eb85
+	github.com/dadosjusbr/storage v0.0.0-20231202000028-bee3d3aef9a9
 	github.com/kelseyhightower/envconfig v1.4.0
 	google.golang.org/protobuf v1.28.1
 )
@@ -30,6 +30,7 @@ require (
 	github.com/newrelic/go-agent/v3 v3.19.2 // indirect
 	github.com/newrelic/go-agent/v3/integrations/nrpq v1.1.1 // indirect
 	golang.org/x/crypto v0.1.0 // indirect
+	golang.org/x/exp v0.0.0-20231127185646-65229373498e
 	golang.org/x/net v0.1.0 // indirect
 	golang.org/x/sys v0.1.0 // indirect
 	golang.org/x/text v0.4.0

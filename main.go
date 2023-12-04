@@ -183,8 +183,6 @@ func main() {
 		}
 	}
 
-	itemSummary := agregandoRubricas(valor_por_rubrica)
-
 	agmi := models.AgencyMonthlyInfo{
 		AgencyID:          er.Rc.Coleta.Orgao,
 		Month:             int(er.Rc.Coleta.Mes),
@@ -194,7 +192,7 @@ func main() {
 		ParserRepo:        er.Rc.Coleta.RepositorioParser,
 		ParserVersion:     er.Rc.Coleta.VersaoParser,
 		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
-		Summary:           summary(er.Rc.Folha.ContraCheque),
+		Summary:           summary(er.Rc.Folha.ContraCheque, valor_por_rubrica),
 		Backups:           []models.Backup{*s3Backups},
 		Meta: &models.Meta{
 			OpenFormat:       er.Rc.Metadados.FormatoAberto,
@@ -214,9 +212,8 @@ func main() {
 			EasinessScore:     float64(er.Rc.Metadados.IndiceFacilidade),
 			CompletenessScore: float64(er.Rc.Metadados.IndiceCompletude),
 		},
-		ProcInfo:    er.Rc.Procinfo,
-		Package:     s3Backup,
-		ItemSummary: &itemSummary,
+		ProcInfo: er.Rc.Procinfo,
+		Package:  s3Backup,
 	}
 	// Calculando o tempo de execução da coleta
 	if c.StartTime != "" {
@@ -244,9 +241,11 @@ func main() {
 }
 
 // summary aux func to make all necessary calculations to DataSummary Struct
-func summary(employees []*coleta.ContraCheque) *models.Summary {
+func summary(employees []*coleta.ContraCheque, valor_por_rubrica map[string]float64) *models.Summary {
+	itemSummary := agregandoRubricas(valor_por_rubrica)
 	memberActive := models.Summary{
 		IncomeHistogram: map[int]int{10000: 0, 20000: 0, 30000: 0, 40000: 0, 50000: 0, -1: 0},
+		ItemSummary:     itemSummary,
 	}
 	for _, emp := range employees {
 		// checking if the employee instance has the required data to build the summary
