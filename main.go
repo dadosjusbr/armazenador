@@ -20,7 +20,6 @@ import (
 	"github.com/dadosjusbr/storage/repo/database"
 	"github.com/dadosjusbr/storage/repo/file_storage"
 	"github.com/kelseyhightower/envconfig"
-	"golang.org/x/exp/slices"
 	"golang.org/x/text/runes"
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
@@ -48,34 +47,34 @@ type config struct {
 func main() {
 	var c config
 	if err := envconfig.Process("", &c); err != nil {
-		status.ExitFromError(status.NewError(4, fmt.Errorf("error loading config values from .env: %v", err.Error())))
+		status.ExitFromError(status.NewError(status.DataUnavailable, fmt.Errorf("error loading config values from .env: %v", err.Error())))
 	}
 
 	// Criando o client do Postgres
 	postgresDB, err := database.NewPostgresDB(c.PostgresUser, c.PostgresPassword, c.PostgresDBName, c.PostgresHost, c.PostgresPort)
 	if err != nil {
-		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating PostgresDB client: %v", err.Error())))
+		status.ExitFromError(status.NewError(status.DataUnavailable, fmt.Errorf("error creating PostgresDB client: %v", err.Error())))
 	}
 	// Criando o client do S3
 	s3Client, err := file_storage.NewS3Client(c.AWSRegion, c.S3Bucket)
 	if err != nil {
-		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating S3 client: %v", err.Error())))
+		status.ExitFromError(status.NewError(status.DataUnavailable, fmt.Errorf("error creating S3 client: %v", err.Error())))
 	}
 
 	// Criando client do storage a partir do banco postgres e do client do s3
 	pgS3Client, err := storage.NewClient(postgresDB, s3Client)
 	if err != nil {
-		status.ExitFromError(status.NewError(3, fmt.Errorf("error setting up postgres storage client: %s", err)))
+		status.ExitFromError(status.NewError(status.ConnectionError, fmt.Errorf("error setting up postgres storage client: %s", err)))
 	}
 	defer pgS3Client.Db.Disconnect()
 
 	var er pipeline.ResultadoExecucao
 	erIN, err := ioutil.ReadAll(os.Stdin)
 	if err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error reading execution result: %v", err)))
+		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error reading execution result: %v", err)))
 	}
 	if err = prototext.Unmarshal(erIN, &er); err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error reading execution result: %v", err)))
+		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error reading execution result: %v", err)))
 	}
 
 	// Package.
@@ -83,7 +82,7 @@ func main() {
 		status.ExitFromError(status.NewError(status.InvalidInput, fmt.Errorf("there is no package to store. PackageResult:%+v", er.Pr)))
 	}
 
-	//Armazenando os datapackages no S3
+	// Armazenando os datapackages no S3
 	dstKey := fmt.Sprintf("%s/datapackage/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
 	s3Backup, err := pgS3Client.Cloud.UploadFile(er.Pr.Pacote, dstKey)
 	if err != nil {
@@ -95,18 +94,18 @@ func main() {
 			status.ExitFromError(status.NewError(2, fmt.Errorf("no backup files found: CrawlingResult:%+v", er.Cr)))
 		}
 	*/
-	//Armazenando os backups no S3
+	// Armazenando os backups no S3
 	dstKey = fmt.Sprintf("%s/backups/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
 	s3Backups, err := pgS3Client.Cloud.UploadFile(er.Rc.Coleta.Arquivos[0], dstKey)
 	if err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup files from S3: %v, error: %v", er.Rc.Coleta.Arquivos, err)))
+		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error trying to get Backup files from S3: %v, error: %v", er.Rc.Coleta.Arquivos, err)))
 	}
 
 	//Armazenando as remuneracoes no S3 e no postgres
 	dstKey = fmt.Sprintf("%s/remuneracoes/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
 	_, err = pgS3Client.Cloud.UploadFile(er.Pr.Remuneracoes.ZipUrl, dstKey)
 	if err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to upload Remunerations zip in S3: %v, error: %v", er.Pr.Remuneracoes, err)))
+		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error trying to upload Remunerations zip in S3: %v, error: %v", er.Pr.Remuneracoes, err)))
 	}
 	err = pgS3Client.StoreRemunerations(models.Remunerations{
 		AgencyID:     er.Rc.Coleta.Orgao,
@@ -118,7 +117,7 @@ func main() {
 		ZipUrl:       fmt.Sprintf("https://%s.s3.amazonaws.com/%s", c.S3Bucket, dstKey),
 	})
 	if err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store Remunerations zip in Postgres: %v, error: %v", er.Pr.Remuneracoes, err)))
+		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error trying to store Remunerations zip in Postgres: %v, error: %v", er.Pr.Remuneracoes, err)))
 	}
 
 	var paychecks []models.Paycheck
@@ -126,7 +125,7 @@ func main() {
 	m, _ := regexp.Compile("[A-Za-z]")
 
 	// Mapeando as rubricas distintas da folha de contracheque
-	valor_por_rubrica := make(map[string]float64)
+	itemValues := make(map[string]float64)
 
 	// Contracheques
 	for id, p := range er.Rc.Folha.ContraCheque {
@@ -174,7 +173,7 @@ func main() {
 					itemSanitizado := sanitizarItem(r.Item)
 					// agregamos o valor por rubrica (não considerando descontos)
 					if r.Natureza != coleta.Remuneracao_D {
-						valor_por_rubrica[itemSanitizado] += math.Abs(r.Valor)
+						itemValues[itemSanitizado] += math.Abs(r.Valor)
 					}
 					remunerations[len(remunerations)-1].SanitizedItem = &itemSanitizado
 				}
@@ -192,7 +191,7 @@ func main() {
 		ParserRepo:        er.Rc.Coleta.RepositorioParser,
 		ParserVersion:     er.Rc.Coleta.VersaoParser,
 		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
-		Summary:           summary(er.Rc.Folha.ContraCheque, valor_por_rubrica),
+		Summary:           summary(er.Rc.Folha.ContraCheque, itemValues),
 		Backups:           []models.Backup{*s3Backups},
 		Meta: &models.Meta{
 			OpenFormat:       er.Rc.Metadados.FormatoAberto,
@@ -217,10 +216,10 @@ func main() {
 	}
 	// Calculando o tempo de execução da coleta
 	if c.StartTime != "" {
-		layout := "2006-01-02 15:04:05.000000"    // formato data-hora
-		t, err := time.Parse(layout, c.StartTime) // transformando a hora (string) para o tipo time.Time
+		const layout = "2006-01-02 15:04:05.000000" // formato data-hora
+		t, err := time.Parse(layout, c.StartTime)   // transformando a hora (string) para o tipo time.Time
 		if err != nil {
-			status.ExitFromError(status.NewError(2, fmt.Errorf("error calculating collection time: %v", err)))
+			status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error calculating collection time: %v", err)))
 		}
 		Duration := time.Since(t) // Calcula a diferença da hora dada com a hora atual (UTC+0)
 		agmi.Duration = Duration.Seconds()
@@ -230,19 +229,19 @@ func main() {
 	}
 
 	if err = pgS3Client.Store(agmi); err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store 'coleta': %v", err)))
+		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error trying to store 'coleta': %v", err)))
 	}
 
 	if err := pgS3Client.StorePaychecks(paychecks, remunerations); err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store 'contracheques' and 'remuneracoes': %v", err)))
+		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error trying to store 'contracheques' and 'remuneracoes': %v", err)))
 	}
 
 	fmt.Println("Store Executed...")
 }
 
 // summary aux func to make all necessary calculations to DataSummary Struct
-func summary(employees []*coleta.ContraCheque, valor_por_rubrica map[string]float64) *models.Summary {
-	itemSummary := agregandoRubricas(valor_por_rubrica)
+func summary(employees []*coleta.ContraCheque, itemValues map[string]float64) *models.Summary {
+	itemSummary := aggregatingItems(itemValues)
 	memberActive := models.Summary{
 		IncomeHistogram: map[int]int{10000: 0, 20000: 0, 30000: 0, 40000: 0, 50000: 0, -1: 0},
 		ItemSummary:     itemSummary,
@@ -356,9 +355,10 @@ func sanitizarItem(item string) string {
 }
 
 // Realiza o download do json com as rubricas desambiguadas
-func listarRubricas() map[string][]string {
+// Ex. saída: map["auxilio-alimentacao":map["alimentacao":{}, "aux alimentacao":{}...]]
+func getItems() map[string]map[string]struct{} {
 	// json com rubricas desambiguadas
-	url := "https://raw.githubusercontent.com/dadosjusbr/desambiguador/main/rubricas.json"
+	const url = "https://raw.githubusercontent.com/dadosjusbr/desambiguador/main/rubricas.json"
 
 	res, err := http.Get(url)
 	if err != nil {
@@ -370,29 +370,42 @@ func listarRubricas() map[string][]string {
 		status.ExitFromError(status.NewError(status.SystemError, err))
 	}
 
-	var rubricas map[string][]string
+	var itemJson map[string][]string
 
 	// unmarshall
-	json.Unmarshal(body, &rubricas)
+	if err := json.Unmarshal(body, &itemJson); err != nil {
+		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error unmarshalling 'rubricas.json': %w", err)))
+	}
 
-	return rubricas
+	// json: cannot unmarshal string into Go value of type struct {}
+	// Esse processo visa facilitar a iteração mútua de rubricas do contracheque <> rubricas desambiguadas
+	// E se faz necessário uma vez que não é possível formatar o json diretamente para esse formato/tipo.
+	itemStruct := make(map[string]map[string]struct{})
+	for key, values := range itemJson {
+		itemStruct[key] = make(map[string]struct{})
+		for _, value := range values {
+			itemStruct[key][value] = struct{}{}
+		}
+	}
+
+	return itemStruct
 }
 
 // Com a lista de rubricas distintas da folha de contracheque (e seu somatório),
 // comparamos com a lista de rubricas desambiguadas e criamos o json da coluna 'resumo'
 // alocando o valor de cada rubrica a seu respectivo grupo.
-func agregandoRubricas(valor_por_rubrica map[string]float64) models.ItemSummary {
-	rubricas := listarRubricas()
+func aggregatingItems(itemValues map[string]float64) models.ItemSummary {
+	items := getItems()
 	var itemSummary models.ItemSummary
 	var others float64
 
-	for rubrica, valor := range valor_por_rubrica {
-		for chave, listaRubricas := range rubricas {
-			others = valor
-			if slices.Contains(listaRubricas, rubrica) {
-				switch chave {
+	for item, value := range itemValues {
+		for key, listItems := range items {
+			others = value
+			if _, ok := listItems[item]; ok {
+				switch key {
 				case "auxilio-alimentacao":
-					itemSummary.FoodAllowance += valor
+					itemSummary.FoodAllowance += value
 					others = 0
 				}
 				break
