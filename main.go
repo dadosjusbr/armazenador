@@ -356,7 +356,7 @@ func sanitizarItem(item string) string {
 
 // Realiza o download do json com as rubricas desambiguadas
 // Ex. saída: map["auxilio-alimentacao":map["alimentacao":{}, "aux alimentacao":{}...]]
-func getItems() map[string]map[string]struct{} {
+func getItems() map[string][]string {
 	// json com rubricas desambiguadas
 	const url = "https://raw.githubusercontent.com/dadosjusbr/desambiguador/main/rubricas.json"
 
@@ -377,18 +377,7 @@ func getItems() map[string]map[string]struct{} {
 		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error unmarshalling 'rubricas.json': %w", err)))
 	}
 
-	// json: cannot unmarshal string into Go value of type struct {}
-	// Esse processo visa facilitar a iteração mútua de rubricas do contracheque <> rubricas desambiguadas
-	// E se faz necessário uma vez que não é possível formatar o json diretamente para esse formato/tipo.
-	itemStruct := make(map[string]map[string]struct{})
-	for key, values := range itemJson {
-		itemStruct[key] = make(map[string]struct{})
-		for _, value := range values {
-			itemStruct[key][value] = struct{}{}
-		}
-	}
-
-	return itemStruct
+	return itemJson
 }
 
 // Com a lista de rubricas distintas da folha de contracheque (e seu somatório),
@@ -399,8 +388,17 @@ func aggregatingItems(itemValues map[string]float64) models.ItemSummary {
 	var itemSummary models.ItemSummary
 	var others float64
 
+	// Esse processo visa facilitar a iteração mútua de rubricas do contracheque <> rubricas desambiguadas
+	itemStruct := make(map[string]map[string]struct{})
+	for key, values := range items {
+		itemStruct[key] = make(map[string]struct{})
+		for _, value := range values {
+			itemStruct[key][value] = struct{}{}
+		}
+	}
+
 	for item, value := range itemValues {
-		for key, listItems := range items {
+		for key, listItems := range itemStruct {
 			others = value
 			if _, ok := listItems[item]; ok {
 				switch key {
