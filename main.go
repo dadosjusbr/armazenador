@@ -355,7 +355,6 @@ func sanitizarItem(item string) string {
 }
 
 // Realiza o download do json com as rubricas desambiguadas
-// Ex. saída: map["auxilio-alimentacao":map["alimentacao":{}, "aux alimentacao":{}...]]
 func getItems() map[string][]string {
 	// json com rubricas desambiguadas
 	const url = "https://raw.githubusercontent.com/dadosjusbr/desambiguador/main/rubricas.json"
