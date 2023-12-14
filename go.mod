@@ -1,10 +1,10 @@
 module armazenador
 
-go 1.17
+go 1.18
 
 require (
 	github.com/dadosjusbr/proto v0.0.0-20221212025627-91c60aa3cd12
-	github.com/dadosjusbr/storage v0.0.0-20231026210858-4a308036eb85
+	github.com/dadosjusbr/storage v0.0.0-20231202000028-bee3d3aef9a9
 	github.com/kelseyhightower/envconfig v1.4.0
 	google.golang.org/protobuf v1.28.1
 )

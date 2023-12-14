@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net/http"
 	"os"
 	"regexp"
 	"strings"
@@ -45,34 +47,34 @@ type config struct {
 func main() {
 	var c config
 	if err := envconfig.Process("", &c); err != nil {
-		status.ExitFromError(status.NewError(4, fmt.Errorf("error loading config values from .env: %v", err.Error())))
+		status.ExitFromError(status.NewError(status.DataUnavailable, fmt.Errorf("error loading config values from .env: %v", err.Error())))
 	}
 
 	// Criando o client do Postgres
 	postgresDB, err := database.NewPostgresDB(c.PostgresUser, c.PostgresPassword, c.PostgresDBName, c.PostgresHost, c.PostgresPort)
 	if err != nil {
-		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating PostgresDB client: %v", err.Error())))
+		status.ExitFromError(status.NewError(status.DataUnavailable, fmt.Errorf("error creating PostgresDB client: %v", err.Error())))
 	}
 	// Criando o client do S3
 	s3Client, err := file_storage.NewS3Client(c.AWSRegion, c.S3Bucket)
 	if err != nil {
-		status.ExitFromError(status.NewError(4, fmt.Errorf("error creating S3 client: %v", err.Error())))
+		status.ExitFromError(status.NewError(status.DataUnavailable, fmt.Errorf("error creating S3 client: %v", err.Error())))
 	}
 
 	// Criando client do storage a partir do banco postgres e do client do s3
 	pgS3Client, err := storage.NewClient(postgresDB, s3Client)
 	if err != nil {
-		status.ExitFromError(status.NewError(3, fmt.Errorf("error setting up postgres storage client: %s", err)))
+		status.ExitFromError(status.NewError(status.ConnectionError, fmt.Errorf("error setting up postgres storage client: %s", err)))
 	}
 	defer pgS3Client.Db.Disconnect()
 
 	var er pipeline.ResultadoExecucao
 	erIN, err := ioutil.ReadAll(os.Stdin)
 	if err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error reading execution result: %v", err)))
+		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error reading execution result: %v", err)))
 	}
 	if err = prototext.Unmarshal(erIN, &er); err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error reading execution result: %v", err)))
+		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error reading execution result: %v", err)))
 	}
 
 	// Package.
@@ -80,7 +82,7 @@ func main() {
 		status.ExitFromError(status.NewError(status.InvalidInput, fmt.Errorf("there is no package to store. PackageResult:%+v", er.Pr)))
 	}
 
-	//Armazenando os datapackages no S3
+	// Armazenando os datapackages no S3
 	dstKey := fmt.Sprintf("%s/datapackage/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
 	s3Backup, err := pgS3Client.Cloud.UploadFile(er.Pr.Pacote, dstKey)
 	if err != nil {
@@ -92,18 +94,18 @@ func main() {
 			status.ExitFromError(status.NewError(2, fmt.Errorf("no backup files found: CrawlingResult:%+v", er.Cr)))
 		}
 	*/
-	//Armazenando os backups no S3
+	// Armazenando os backups no S3
 	dstKey = fmt.Sprintf("%s/backups/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
 	s3Backups, err := pgS3Client.Cloud.UploadFile(er.Rc.Coleta.Arquivos[0], dstKey)
 	if err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to get Backup files from S3: %v, error: %v", er.Rc.Coleta.Arquivos, err)))
+		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error trying to get Backup files from S3: %v, error: %v", er.Rc.Coleta.Arquivos, err)))
 	}
 
 	//Armazenando as remuneracoes no S3 e no postgres
 	dstKey = fmt.Sprintf("%s/remuneracoes/%s-%d-%d.zip", er.Rc.Coleta.Orgao, er.Rc.Coleta.Orgao, er.Rc.Coleta.Ano, er.Rc.Coleta.Mes)
 	_, err = pgS3Client.Cloud.UploadFile(er.Pr.Remuneracoes.ZipUrl, dstKey)
 	if err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to upload Remunerations zip in S3: %v, error: %v", er.Pr.Remuneracoes, err)))
+		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error trying to upload Remunerations zip in S3: %v, error: %v", er.Pr.Remuneracoes, err)))
 	}
 	err = pgS3Client.StoreRemunerations(models.Remunerations{
 		AgencyID:     er.Rc.Coleta.Orgao,
@@ -115,62 +117,15 @@ func main() {
 		ZipUrl:       fmt.Sprintf("https://%s.s3.amazonaws.com/%s", c.S3Bucket, dstKey),
 	})
 	if err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store Remunerations zip in Postgres: %v, error: %v", er.Pr.Remuneracoes, err)))
-	}
-
-	agmi := models.AgencyMonthlyInfo{
-		AgencyID:          er.Rc.Coleta.Orgao,
-		Month:             int(er.Rc.Coleta.Mes),
-		Year:              int(er.Rc.Coleta.Ano),
-		CrawlerRepo:       er.Rc.Coleta.RepositorioColetor,
-		CrawlerVersion:    er.Rc.Coleta.VersaoColetor,
-		ParserRepo:        er.Rc.Coleta.RepositorioParser,
-		ParserVersion:     er.Rc.Coleta.VersaoParser,
-		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
-		Summary:           summary(er.Rc.Folha.ContraCheque),
-		Backups:           []models.Backup{*s3Backups},
-		Meta: &models.Meta{
-			OpenFormat:       er.Rc.Metadados.FormatoAberto,
-			Access:           er.Rc.Metadados.Acesso.String(),
-			Extension:        er.Rc.Metadados.Extensao.String(),
-			StrictlyTabular:  er.Rc.Metadados.EstritamenteTabular,
-			ConsistentFormat: er.Rc.Metadados.FormatoConsistente,
-			HaveEnrollment:   er.Rc.Metadados.TemMatricula,
-			ThereIsACapacity: er.Rc.Metadados.TemLotacao,
-			HasPosition:      er.Rc.Metadados.TemCargo,
-			BaseRevenue:      er.Rc.Metadados.ReceitaBase.String(),
-			OtherRecipes:     er.Rc.Metadados.OutrasReceitas.String(),
-			Expenditure:      er.Rc.Metadados.Despesas.String(),
-		},
-		Score: &models.Score{
-			Score:             float64(er.Rc.Metadados.IndiceTransparencia),
-			EasinessScore:     float64(er.Rc.Metadados.IndiceFacilidade),
-			CompletenessScore: float64(er.Rc.Metadados.IndiceCompletude),
-		},
-		ProcInfo: er.Rc.Procinfo,
-		Package:  s3Backup,
-	}
-	// Calculando o tempo de execução da coleta
-	if c.StartTime != "" {
-		layout := "2006-01-02 15:04:05.000000"    // formato data-hora
-		t, err := time.Parse(layout, c.StartTime) // transformando a hora (string) para o tipo time.Time
-		if err != nil {
-			status.ExitFromError(status.NewError(2, fmt.Errorf("error calculating collection time: %v", err)))
-		}
-		Duration := time.Since(t) // Calcula a diferença da hora dada com a hora atual (UTC+0)
-		agmi.Duration = Duration.Seconds()
-	}
-	if er.Rc.Procinfo != nil && er.Rc.Procinfo.Status != 0 {
-		agmi.ProcInfo = er.Rc.Procinfo
-	}
-
-	if err = pgS3Client.Store(agmi); err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store 'coleta': %v", err)))
+		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error trying to store Remunerations zip in Postgres: %v, error: %v", er.Pr.Remuneracoes, err)))
 	}
 
 	var paychecks []models.Paycheck
 	var remunerations []models.PaycheckItem
 	m, _ := regexp.Compile("[A-Za-z]")
+
+	// Mapeando as rubricas distintas da folha de contracheque
+	itemValues := make(map[string]float64)
 
 	// Contracheques
 	for id, p := range er.Rc.Folha.ContraCheque {
@@ -216,23 +171,80 @@ func main() {
 				} else {
 					// Se a rubrica não for inconsistente, faremos uma cópia sanitizada na coluna item_sanitizado.
 					itemSanitizado := sanitizarItem(r.Item)
+					// agregamos o valor por rubrica (não considerando descontos)
+					if r.Natureza != coleta.Remuneracao_D {
+						itemValues[itemSanitizado] += math.Abs(r.Valor)
+					}
 					remunerations[len(remunerations)-1].SanitizedItem = &itemSanitizado
 				}
 				i++
 			}
 		}
 	}
+
+	agmi := models.AgencyMonthlyInfo{
+		AgencyID:          er.Rc.Coleta.Orgao,
+		Month:             int(er.Rc.Coleta.Mes),
+		Year:              int(er.Rc.Coleta.Ano),
+		CrawlerRepo:       er.Rc.Coleta.RepositorioColetor,
+		CrawlerVersion:    er.Rc.Coleta.VersaoColetor,
+		ParserRepo:        er.Rc.Coleta.RepositorioParser,
+		ParserVersion:     er.Rc.Coleta.VersaoParser,
+		CrawlingTimestamp: er.Rc.Coleta.TimestampColeta,
+		Summary:           summary(er.Rc.Folha.ContraCheque, itemValues),
+		Backups:           []models.Backup{*s3Backups},
+		Meta: &models.Meta{
+			OpenFormat:       er.Rc.Metadados.FormatoAberto,
+			Access:           er.Rc.Metadados.Acesso.String(),
+			Extension:        er.Rc.Metadados.Extensao.String(),
+			StrictlyTabular:  er.Rc.Metadados.EstritamenteTabular,
+			ConsistentFormat: er.Rc.Metadados.FormatoConsistente,
+			HaveEnrollment:   er.Rc.Metadados.TemMatricula,
+			ThereIsACapacity: er.Rc.Metadados.TemLotacao,
+			HasPosition:      er.Rc.Metadados.TemCargo,
+			BaseRevenue:      er.Rc.Metadados.ReceitaBase.String(),
+			OtherRecipes:     er.Rc.Metadados.OutrasReceitas.String(),
+			Expenditure:      er.Rc.Metadados.Despesas.String(),
+		},
+		Score: &models.Score{
+			Score:             float64(er.Rc.Metadados.IndiceTransparencia),
+			EasinessScore:     float64(er.Rc.Metadados.IndiceFacilidade),
+			CompletenessScore: float64(er.Rc.Metadados.IndiceCompletude),
+		},
+		ProcInfo: er.Rc.Procinfo,
+		Package:  s3Backup,
+	}
+	// Calculando o tempo de execução da coleta
+	if c.StartTime != "" {
+		const layout = "2006-01-02 15:04:05.000000" // formato data-hora
+		t, err := time.Parse(layout, c.StartTime)   // transformando a hora (string) para o tipo time.Time
+		if err != nil {
+			status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error calculating collection time: %v", err)))
+		}
+		Duration := time.Since(t) // Calcula a diferença da hora dada com a hora atual (UTC+0)
+		agmi.Duration = Duration.Seconds()
+	}
+	if er.Rc.Procinfo != nil && er.Rc.Procinfo.Status != 0 {
+		agmi.ProcInfo = er.Rc.Procinfo
+	}
+
+	if err = pgS3Client.Store(agmi); err != nil {
+		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error trying to store 'coleta': %v", err)))
+	}
+
 	if err := pgS3Client.StorePaychecks(paychecks, remunerations); err != nil {
-		status.ExitFromError(status.NewError(2, fmt.Errorf("error trying to store 'contracheques' and 'remuneracoes': %v", err)))
+		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error trying to store 'contracheques' and 'remuneracoes': %v", err)))
 	}
 
 	fmt.Println("Store Executed...")
 }
 
 // summary aux func to make all necessary calculations to DataSummary Struct
-func summary(employees []*coleta.ContraCheque) *models.Summary {
+func summary(employees []*coleta.ContraCheque, itemValues map[string]float64) *models.Summary {
+	itemSummary := aggregatingItems(itemValues)
 	memberActive := models.Summary{
 		IncomeHistogram: map[int]int{10000: 0, 20000: 0, 30000: 0, 40000: 0, 50000: 0, -1: 0},
+		ItemSummary:     itemSummary,
 	}
 	for _, emp := range employees {
 		// checking if the employee instance has the required data to build the summary
@@ -340,4 +352,63 @@ func sanitizarItem(item string) string {
 	item = strings.Join(strings.Fields(item), " ")
 
 	return item
+}
+
+// Realiza o download do json com as rubricas desambiguadas
+func getItems() map[string][]string {
+	// json com rubricas desambiguadas
+	const url = "https://raw.githubusercontent.com/dadosjusbr/desambiguador/main/rubricas.json"
+
+	res, err := http.Get(url)
+	if err != nil {
+		status.ExitFromError(status.NewError(status.ConnectionError, err))
+	}
+
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		status.ExitFromError(status.NewError(status.SystemError, err))
+	}
+
+	var itemJson map[string][]string
+
+	// unmarshall
+	if err := json.Unmarshal(body, &itemJson); err != nil {
+		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error unmarshalling 'rubricas.json': %w", err)))
+	}
+
+	return itemJson
+}
+
+// Com a lista de rubricas distintas da folha de contracheque (e seu somatório),
+// comparamos com a lista de rubricas desambiguadas e criamos o json da coluna 'resumo'
+// alocando o valor de cada rubrica a seu respectivo grupo.
+func aggregatingItems(itemValues map[string]float64) models.ItemSummary {
+	items := getItems()
+	var itemSummary models.ItemSummary
+	var others float64
+
+	// Esse processo visa facilitar a iteração mútua de rubricas do contracheque <> rubricas desambiguadas
+	itemStruct := make(map[string]map[string]struct{}, len(items))
+	for key, values := range items {
+		itemStruct[key] = make(map[string]struct{}, len(values))
+		for _, value := range values {
+			itemStruct[key][value] = struct{}{}
+		}
+	}
+
+	for item, value := range itemValues {
+		for key, listItems := range itemStruct {
+			others = value
+			if _, ok := listItems[item]; ok {
+				switch key {
+				case "auxilio-alimentacao":
+					itemSummary.FoodAllowance += value
+					others = 0
+				}
+				break
+			}
+		}
+		itemSummary.Others += others
+	}
+	return itemSummary
 }
