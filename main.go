@@ -388,9 +388,9 @@ func aggregatingItems(itemValues map[string]float64) models.ItemSummary {
 	var others float64
 
 	// Esse processo visa facilitar a iteração mútua de rubricas do contracheque <> rubricas desambiguadas
-	itemStruct := make(map[string]map[string]struct{})
+	itemStruct := make(map[string]map[string]struct{}, len(items))
 	for key, values := range items {
-		itemStruct[key] = make(map[string]struct{})
+		itemStruct[key] = make(map[string]struct{}, len(values))
 		for _, value := range values {
 			itemStruct[key][value] = struct{}{}
 		}
