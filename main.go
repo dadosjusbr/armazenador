@@ -403,8 +403,10 @@ func aggregatingItems(itemValues map[string]float64) models.ItemSummary {
 				switch key {
 				case "auxilio-alimentacao":
 					itemSummary.FoodAllowance += value
-					others = 0
+				case "licenca-premio":
+					itemSummary.BonusLicense += value
 				}
+				others = 0
 				break
 			}
 		}
