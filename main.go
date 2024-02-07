@@ -142,7 +142,7 @@ func main() {
 			Workplace:    p.LocalTrabalho,
 			Salary:       salary,
 			Benefits:     benefits,
-			Discounts:    math.Abs(discounts),
+			Discounts:    discounts,
 			Remuneration: remuneration,
 			Situation:    ativoInativo(p.Ativo, er.Rc.Coleta.Orgao),
 		})
@@ -262,7 +262,6 @@ func summary(employees []*coleta.ContraCheque, itemValues map[string]float64) *m
 // updateSummary auxiliary function that updates the summary data at each employee value
 func updateSummary(s *models.Summary, emp coleta.ContraCheque) {
 	updateData := func(d *models.DataSummary, value float64, count int) {
-		value = math.Abs(value)
 		if count == 1 {
 			d.Min = value
 			d.Max = value
@@ -305,14 +304,14 @@ func calcBaseSalary(emp coleta.ContraCheque) (float64, float64, float64, float64
 	var discounts float64
 	for _, v := range emp.Remuneracoes.Remuneracao {
 		if v.TipoReceita == coleta.Remuneracao_B && v.Natureza == coleta.Remuneracao_R {
-			salaryBase += v.Valor
+			salaryBase += math.Abs(v.Valor)
 		} else if v.TipoReceita == coleta.Remuneracao_O && v.Natureza == coleta.Remuneracao_R {
-			benefits += v.Valor
+			benefits += math.Abs(v.Valor)
 		} else if v.Natureza == coleta.Remuneracao_D {
-			discounts += v.Valor
+			discounts += math.Abs(v.Valor)
 		}
 	}
-	remuneration := salaryBase + benefits - math.Abs(discounts)
+	remuneration := salaryBase + benefits - discounts
 	return salaryBase, benefits, discounts, remuneration
 }
 
