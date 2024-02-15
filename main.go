@@ -406,6 +406,8 @@ func aggregatingItems(itemValues map[string]float64) models.ItemSummary {
 					itemSummary.BonusLicense += value
 				case "indenizacao-de-ferias":
 					itemSummary.VacationCompensation += value
+				case "gratificacao-natalina":
+					itemSummary.ChristmasBonus += value
 				}
 				others = 0
 				break
