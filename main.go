@@ -158,12 +158,13 @@ func main() {
 					Year:       int(er.Rc.Coleta.Ano),
 					Category:   r.Categoria,
 					Item:       r.Item,
-					Value:      math.Abs(r.Valor),
 				})
 				if r.Natureza == coleta.Remuneracao_D {
 					remunerations[len(remunerations)-1].Type = "D"
+					remunerations[len(remunerations)-1].Value = math.Abs(r.Valor)
 				} else {
 					remunerations[len(remunerations)-1].Type = r.Natureza.String() + "/" + r.TipoReceita.String()
+					remunerations[len(remunerations)-1].Value = r.Valor
 				}
 				// rubrica inconsistente
 				if !m.MatchString(r.Item) {
@@ -173,7 +174,7 @@ func main() {
 					itemSanitizado := sanitizarItem(r.Item)
 					// agregamos o valor por rubrica (não considerando descontos)
 					if r.Natureza != coleta.Remuneracao_D {
-						itemValues[itemSanitizado] += math.Abs(r.Valor)
+						itemValues[itemSanitizado] += r.Valor
 					}
 					remunerations[len(remunerations)-1].SanitizedItem = &itemSanitizado
 				}
@@ -304,13 +305,14 @@ func calcBaseSalary(emp coleta.ContraCheque) (float64, float64, float64, float64
 	var discounts float64
 	for _, v := range emp.Remuneracoes.Remuneracao {
 		if v.TipoReceita == coleta.Remuneracao_B && v.Natureza == coleta.Remuneracao_R {
-			salaryBase += math.Abs(v.Valor)
+			salaryBase += v.Valor
 		} else if v.TipoReceita == coleta.Remuneracao_O && v.Natureza == coleta.Remuneracao_R {
-			benefits += math.Abs(v.Valor)
+			benefits += v.Valor
 		} else if v.Natureza == coleta.Remuneracao_D {
-			discounts += math.Abs(v.Valor)
+			discounts += v.Valor
 		}
 	}
+	discounts = math.Abs(discounts)
 	remuneration := salaryBase + benefits - discounts
 	return salaryBase, benefits, discounts, remuneration
 }
@@ -412,6 +414,8 @@ func aggregatingItems(itemValues map[string]float64) models.ItemSummary {
 					itemSummary.CompensatoryLicense += value
 				case "auxilio-saude":
 					itemSummary.HealthAllowance += value
+				case "ferias":
+					itemSummary.Vacation += value
 				}
 				others = 0
 				break
