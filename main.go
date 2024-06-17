@@ -131,20 +131,21 @@ func main() {
 	for id, p := range er.Rc.Folha.ContraCheque {
 		salary, benefits, discounts, remuneration := calcBaseSalary(*p)
 		paychecks = append(paychecks, models.Paycheck{
-			ID:           id + 1,
-			Agency:       er.Rc.Coleta.Orgao,
-			Month:        int(er.Rc.Coleta.Mes),
-			Year:         int(er.Rc.Coleta.Ano),
-			CollectKey:   er.Rc.Coleta.ChaveColeta,
-			Name:         p.Nome,
-			RegisterID:   p.Matricula,
-			Role:         p.Funcao,
-			Workplace:    p.LocalTrabalho,
-			Salary:       salary,
-			Benefits:     benefits,
-			Discounts:    discounts,
-			Remuneration: remuneration,
-			Situation:    ativoInativo(p.Ativo, er.Rc.Coleta.Orgao),
+			ID:            id + 1,
+			Agency:        er.Rc.Coleta.Orgao,
+			Month:         int(er.Rc.Coleta.Mes),
+			Year:          int(er.Rc.Coleta.Ano),
+			CollectKey:    er.Rc.Coleta.ChaveColeta,
+			Name:          p.Nome,
+			RegisterID:    p.Matricula,
+			Role:          p.Funcao,
+			Workplace:     p.LocalTrabalho,
+			Salary:        salary,
+			Benefits:      benefits,
+			Discounts:     discounts,
+			Remuneration:  remuneration,
+			Situation:     ativoInativo(p.Ativo, er.Rc.Coleta.Orgao),
+			SanitizedName: sanitizarItem(p.Nome),
 		})
 		// Detalhamento das despesas
 		i := 1
@@ -327,7 +328,7 @@ func ativoInativo(ativo bool, orgao string) *string {
 	}
 }
 
-// Sanitizando as rubricas:
+// Sanitizando as rubricas e nomes:
 // deixando-as em minúsculo, sem acentos, pontuações, caracteres especiais e espaços duplos
 func sanitizarItem(item string) string {
 	// Converte para minúsculas
