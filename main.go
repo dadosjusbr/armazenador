@@ -23,6 +23,7 @@ import (
 	"golang.org/x/text/runes"
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
@@ -238,7 +239,26 @@ func main() {
 		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("error trying to store 'contracheques' and 'remuneracoes': %v", err)))
 	}
 
-	fmt.Println("Store Executed...")
+	// O verificador-integridade-dados aguarda os dados no formato Json
+	jsonEr, err := protojson.Marshal(&er)
+	if err != nil {
+		err = status.NewError(status.SystemError, fmt.Errorf("error marshalling execution result:%q", err))
+		status.ExitFromError(err)
+	}
+
+	// Adicionando o campo sumário, que é calculado no próprio armazenador e não adicionado ao proto.
+	var data map[string]interface{}
+	if err := json.Unmarshal(jsonEr, &data); err != nil {
+		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("failed to unmarshal JSON: %v", err)))
+	}
+	data["sumario"] = agmi.Summary
+
+	newJsonEr, err := json.Marshal(data)
+	if err != nil {
+		status.ExitFromError(status.NewError(status.SystemError, fmt.Errorf("failed to marshal JSON: %v", err)))
+	}
+
+	fmt.Printf("%s\n", newJsonEr)
 }
 
 // summary aux func to make all necessary calculations to DataSummary Struct
