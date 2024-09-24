@@ -185,6 +185,9 @@ func main() {
 		}
 	}
 
+	// A variável de ambiente só será passada quando a coleta for manual
+	_, manualCollection := os.LookupEnv("MANUAL_COLLECTION")
+
 	agmi := models.AgencyMonthlyInfo{
 		AgencyID:          er.Rc.Coleta.Orgao,
 		Month:             int(er.Rc.Coleta.Mes),
@@ -214,8 +217,9 @@ func main() {
 			EasinessScore:     float64(er.Rc.Metadados.IndiceFacilidade),
 			CompletenessScore: float64(er.Rc.Metadados.IndiceCompletude),
 		},
-		ProcInfo: er.Rc.Procinfo,
-		Package:  s3Backup,
+		ProcInfo:         er.Rc.Procinfo,
+		Package:          s3Backup,
+		ManualCollection: manualCollection,
 	}
 	// Calculando o tempo de execução da coleta
 	if c.StartTime != "" {
