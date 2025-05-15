@@ -171,11 +171,14 @@ func main() {
 				// rubrica inconsistente
 				if !m.MatchString(r.Item) {
 					remunerations[len(remunerations)-1].Inconsistent = true
+					if r.TipoReceita == coleta.Remuneracao_O && r.Natureza == coleta.Remuneracao_R {
+						itemValues["outras"] += r.Valor
+					}
 				} else {
 					// Se a rubrica não for inconsistente, faremos uma cópia sanitizada na coluna item_sanitizado.
 					itemSanitizado := sanitizarItem(r.Item)
-					// agregamos o valor por rubrica (não considerando descontos)
-					if r.Natureza != coleta.Remuneracao_D {
+					// agregamos o valor por rubrica (apenas benefícios)
+					if r.TipoReceita == coleta.Remuneracao_O && r.Natureza == coleta.Remuneracao_R {
 						itemValues[itemSanitizado] += r.Valor
 					}
 					remunerations[len(remunerations)-1].SanitizedItem = &itemSanitizado
@@ -187,6 +190,11 @@ func main() {
 
 	// A variável de ambiente só será passada quando a coleta for manual
 	_, manualCollection := os.LookupEnv("MANUAL_COLLECTION")
+	if manualCollection {
+		er.Rc.Metadados.IndiceTransparencia = 0
+		er.Rc.Metadados.IndiceFacilidade = 0
+		er.Rc.Metadados.IndiceCompletude = 0
+	}
 
 	agmi := models.AgencyMonthlyInfo{
 		AgencyID:          er.Rc.Coleta.Orgao,
@@ -381,9 +389,9 @@ func sanitizarItem(item string) string {
 }
 
 // Realiza o download do json com as rubricas desambiguadas
-func getItems() map[string][]string {
+func getItems() map[string]string {
 	// json com rubricas desambiguadas
-	const url = "https://raw.githubusercontent.com/dadosjusbr/desambiguador/main/rubricas.json"
+	const url = "https://raw.githubusercontent.com/dadosjusbr/desambiguador/refs/heads/main/desambiguacao_macro.json"
 
 	res, err := http.Get(url)
 	if err != nil {
@@ -395,7 +403,7 @@ func getItems() map[string][]string {
 		status.ExitFromError(status.NewError(status.SystemError, err))
 	}
 
-	var itemJson map[string][]string
+	var itemJson map[string]string
 
 	// unmarshall
 	if err := json.Unmarshal(body, &itemJson); err != nil {
@@ -409,44 +417,23 @@ func getItems() map[string][]string {
 // comparamos com a lista de rubricas desambiguadas e criamos o json da coluna 'resumo'
 // alocando o valor de cada rubrica a seu respectivo grupo.
 func aggregatingItems(itemValues map[string]float64) models.ItemSummary {
+	// Acessando o json com as rubricas desambiguadas
 	items := getItems()
-	var itemSummary models.ItemSummary
-	var others float64
 
-	// Esse processo visa facilitar a iteração mútua de rubricas do contracheque <> rubricas desambiguadas
-	itemStruct := make(map[string]map[string]struct{}, len(items))
-	for key, values := range items {
-		itemStruct[key] = make(map[string]struct{}, len(values))
-		for _, value := range values {
-			itemStruct[key][value] = struct{}{}
-		}
-	}
+	rubricas := make(map[string]float64)
 
+	// Iterando sobre as rubricas da folha de pagamento
+	// e alocando o valor de cada rubrica a seu respectivo grupo (desambiguação macro)
+	// Se a rubrica não estiver no json (variável items), i.e. não desambiguada,
+	// alocamos o valor a "outras"
 	for item, value := range itemValues {
-		for key, listItems := range itemStruct {
-			others = value
-			if _, ok := listItems[item]; ok {
-				switch key {
-				case "auxilio-alimentacao":
-					itemSummary.FoodAllowance += value
-				case "licenca-premio":
-					itemSummary.BonusLicense += value
-				case "indenizacao-de-ferias":
-					itemSummary.VacationCompensation += value
-				case "gratificacao-natalina":
-					itemSummary.ChristmasBonus += value
-				case "licenca-compensatoria":
-					itemSummary.CompensatoryLicense += value
-				case "auxilio-saude":
-					itemSummary.HealthAllowance += value
-				case "ferias":
-					itemSummary.Vacation += value
-				}
-				others = 0
-				break
-			}
+		key, ok := items[item]
+		if !ok {
+			key = "outras"
 		}
-		itemSummary.Others += others
+		key = strings.ReplaceAll(key, "-", "_")
+
+		rubricas[key] += value
 	}
-	return itemSummary
+	return rubricas
 }
